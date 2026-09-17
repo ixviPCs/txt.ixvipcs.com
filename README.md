@@ -1,6 +1,6 @@
 # Open Chat
 
-A simple display-name-based real-time chat room. Recent messages stay in memory while the server runs (up to 100); restarting it clears the room history.
+A simple display-name-based real-time chat room. Each browser remembers its chosen display name locally, and the server saves chat history in `chat-history.json` so it survives restarts. That history file stays only on the server and is intentionally excluded from Git.
 
 ## Run it locally
 

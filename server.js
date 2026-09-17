@@ -1,4 +1,5 @@
 const express = require("express");
+const fs = require("fs");
 const http = require("http");
 const path = require("path");
 const { Server } = require("socket.io");
@@ -10,10 +11,10 @@ const io = new Server(server, {
 });
 
 const PORT = Number(process.env.PORT) || 3000;
-const MAX_MESSAGES = 100;
 const MAX_NAME_LENGTH = 24;
 const MAX_MESSAGE_LENGTH = 1_000;
-const messages = [];
+const HISTORY_FILE = path.join(__dirname, "chat-history.json");
+const messages = loadHistory();
 
 app.use(express.static(path.join(__dirname, "public")));
 
@@ -22,10 +23,30 @@ function cleanText(value, maxLength) {
   return value.trim().replace(/\s+/g, " ").slice(0, maxLength);
 }
 
+function loadHistory() {
+  try {
+    const history = JSON.parse(fs.readFileSync(HISTORY_FILE, "utf8"));
+    return Array.isArray(history) ? history : [];
+  } catch (error) {
+    if (error.code !== "ENOENT") console.error("Could not read chat history:", error.message);
+    return [];
+  }
+}
+
+function saveHistory() {
+  try {
+    const temporaryFile = `${HISTORY_FILE}.tmp`;
+    fs.writeFileSync(temporaryFile, JSON.stringify(messages), "utf8");
+    fs.renameSync(temporaryFile, HISTORY_FILE);
+  } catch (error) {
+    console.error("Could not save chat history:", error.message);
+  }
+}
+
 function addSystemMessage(text) {
   const message = { type: "system", text, timestamp: Date.now() };
   messages.push(message);
-  if (messages.length > MAX_MESSAGES) messages.shift();
+  saveHistory();
   io.emit("message", message);
 }
 
@@ -62,7 +83,7 @@ io.on("connection", (socket) => {
       timestamp: Date.now()
     };
     messages.push(message);
-    if (messages.length > MAX_MESSAGES) messages.shift();
+    saveHistory();
     io.emit("message", message);
     acknowledge?.({ ok: true });
   });
