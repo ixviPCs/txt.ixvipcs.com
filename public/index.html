@@ -1,0 +1,46 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Open Chat</title>
+    <link rel="stylesheet" href="styles.css" />
+  </head>
+  <body>
+    <main class="app-shell">
+      <header>
+        <p class="eyebrow">LIVE ROOM</p>
+        <h1>Open Chat</h1>
+        <p class="subtitle">A small place to talk in real time.</p>
+      </header>
+
+      <section id="name-panel" class="name-panel" aria-labelledby="name-heading">
+        <h2 id="name-heading">Pick a display name</h2>
+        <form id="name-form">
+          <label for="name">Your name</label>
+          <div class="input-row">
+            <input id="name" name="name" maxlength="24" autocomplete="nickname" placeholder="e.g. Alex" required />
+            <button type="submit">Enter chat</button>
+          </div>
+          <p id="name-error" class="error" role="alert"></p>
+        </form>
+      </section>
+
+      <section id="chat-panel" class="chat-panel" hidden aria-label="Chat room">
+        <div class="chat-topbar">
+          <span id="identity"></span>
+          <button id="change-name" class="text-button" type="button">Change name</button>
+        </div>
+        <ol id="messages" class="messages" aria-live="polite" aria-label="Messages"></ol>
+        <form id="message-form" class="message-form">
+          <label class="sr-only" for="message">Message</label>
+          <input id="message" maxlength="1000" autocomplete="off" placeholder="Write a message…" disabled required />
+          <button id="send" type="submit" disabled>Send</button>
+        </form>
+        <p id="chat-error" class="error" role="alert"></p>
+      </section>
+    </main>
+    <script src="/socket.io/socket.io.js"></script>
+    <script src="app.js"></script>
+  </body>
+</html>

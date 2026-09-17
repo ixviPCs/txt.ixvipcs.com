@@ -1,0 +1,5 @@
+# Replace chat.example.com with the subdomain you choose.
+# Caddy obtains and renews HTTPS certificates automatically.
+chat.example.com {
+    reverse_proxy 127.0.0.1:3000
+}
