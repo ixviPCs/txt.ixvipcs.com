@@ -8,14 +8,9 @@
   </head>
   <body>
     <main class="app-shell">
-      <header>
-        <p class="eyebrow">LIVE ROOM</p>
-        <h1>Open Chat</h1>
-        <p class="subtitle">A small place to talk in real time.</p>
-      </header>
 
-      <section id="name-panel" class="name-panel" aria-labelledby="name-heading">
-        <h2 id="name-heading">Pick a display name</h2>
+      <section id="name-panel" class="name-panel" aria-labelledby="name-heading" hidden>
+        <h2 id="name-heading">Pick your name</h2>
         <form id="name-form">
           <label for="name">Your name</label>
           <div class="input-row">
@@ -26,10 +21,17 @@
         </form>
       </section>
 
-      <section id="chat-panel" class="chat-panel" hidden aria-label="Chat room">
+      <section id="chat-panel" class="chat-panel" aria-label="Chat room" hidden>
         <div class="chat-topbar">
           <span id="identity"></span>
-          <button id="change-name" class="text-button" type="button">Change name</button>
+          <div class="room-actions">
+            <details class="online-users">
+              <summary><span id="online-count">0 online</span></summary>
+              <ul id="online-list" aria-label="People online"></ul>
+            </details>
+            <button id="change-name" class="text-button" type="button">Change name</button>
+            <button id="leave-chat" class="text-button leave-button" type="button">Leave chat</button>
+          </div>
         </div>
         <ol id="messages" class="messages" aria-live="polite" aria-label="Messages"></ol>
         <form id="message-form" class="message-form">

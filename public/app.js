@@ -10,7 +10,12 @@ const identity = document.querySelector("#identity");
 const nameError = document.querySelector("#name-error");
 const chatError = document.querySelector("#chat-error");
 const changeName = document.querySelector("#change-name");
+const leaveChat = document.querySelector("#leave-chat");
+const onlineCount = document.querySelector("#online-count");
+const onlineList = document.querySelector("#online-list");
 const savedNameKey = "open-chat-display-name";
+const leftChatKey = "open-chat-left";
+let intentionallyLeft = localStorage.getItem(leftChatKey) === "true";
 
 function timeLabel(timestamp) {
   return new Intl.DateTimeFormat([], { hour: "numeric", minute: "2-digit" }).format(timestamp);
@@ -44,15 +49,25 @@ function enterChat(name) {
   chatPanel.hidden = false;
   messageInput.disabled = false;
   document.querySelector("#send").disabled = false;
+  changeName.disabled = false;
+}
+
+function showNamePanel() {
+  chatPanel.hidden = true;
+  namePanel.hidden = false;
+  nameInput.value = localStorage.getItem(savedNameKey) || "";
+  nameInput.focus();
 }
 
 function setName(name, focusMessage = false) {
-  socket.emit("set name", name, (result) => {
+  socket.emit("set name", { name, announceJoin: intentionallyLeft }, (result) => {
     if (!result?.ok) {
       nameError.textContent = result?.error || "Could not save your name.";
       return;
     }
     localStorage.setItem(savedNameKey, result.name);
+    intentionallyLeft = false;
+    localStorage.removeItem(leftChatKey);
     enterChat(result.name);
     if (focusMessage) messageInput.focus();
   });
@@ -63,12 +78,30 @@ socket.on("history", (history) => {
   history.forEach(renderMessage);
 });
 socket.on("message", renderMessage);
+socket.on("online users", (users) => {
+  onlineCount.textContent = `${users.length} online`;
+  onlineList.replaceChildren();
+  users.forEach((name) => {
+    const person = document.createElement("li");
+    person.textContent = name;
+    onlineList.append(person);
+  });
+});
 socket.on("connect", () => {
   chatError.textContent = "";
   const savedName = localStorage.getItem(savedNameKey);
-  if (savedName) setName(savedName);
+  if (savedName && !intentionallyLeft) setName(savedName);
 });
-socket.on("disconnect", () => { chatError.textContent = "Connection lost. Reconnecting…"; });
+socket.on("disconnect", () => {
+  if (intentionallyLeft) return;
+  chatError.textContent = "Connection lost. Reconnecting…";
+});
+
+if (localStorage.getItem(savedNameKey) && !intentionallyLeft) {
+  chatPanel.hidden = false;
+} else {
+  showNamePanel();
+}
 
 nameForm.addEventListener("submit", (event) => {
   event.preventDefault();
@@ -87,8 +120,15 @@ messageForm.addEventListener("submit", (event) => {
 });
 
 changeName.addEventListener("click", () => {
-  chatPanel.hidden = true;
-  namePanel.hidden = false;
-  nameInput.value = localStorage.getItem(savedNameKey) || "";
-  nameInput.focus();
+  showNamePanel();
+});
+
+leaveChat.addEventListener("click", () => {
+  if (!window.confirm("Leave the chat?")) return;
+  intentionallyLeft = false;
+  localStorage.setItem(leftChatKey, "true");
+  intentionallyLeft = true;
+  socket.emit("leave chat");
+  chatError.textContent = "";
+  showNamePanel();
 });

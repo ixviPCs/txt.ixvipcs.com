@@ -43,6 +43,17 @@ function saveHistory() {
   }
 }
 
+function onlineUsers() {
+  return [...io.sockets.sockets.values()]
+    .map((connectedSocket) => connectedSocket.data.name)
+    .filter(Boolean)
+    .sort((first, second) => first.localeCompare(second));
+}
+
+function broadcastOnlineUsers() {
+  io.emit("online users", onlineUsers());
+}
+
 function addSystemMessage(text) {
   const message = { type: "system", text, timestamp: Date.now() };
   messages.push(message);
@@ -52,9 +63,12 @@ function addSystemMessage(text) {
 
 io.on("connection", (socket) => {
   socket.emit("history", messages);
+  socket.emit("online users", onlineUsers());
 
   socket.on("set name", (value, acknowledge) => {
-    const name = cleanText(value, MAX_NAME_LENGTH);
+    const requestedName = typeof value === "object" && value ? value.name : value;
+    const announceJoin = Boolean(typeof value === "object" && value?.announceJoin);
+    const name = cleanText(requestedName, MAX_NAME_LENGTH);
     if (!name) {
       acknowledge?.({ ok: false, error: "Choose a display name first." });
       return;
@@ -63,8 +77,10 @@ io.on("connection", (socket) => {
     const previousName = socket.data.name;
     socket.data.name = name;
     acknowledge?.({ ok: true, name });
-    if (previousName && previousName !== name) addSystemMessage(`${previousName} is now ${name}.`);
-    else if (!previousName) addSystemMessage(`${name} joined the chat.`);
+    broadcastOnlineUsers();
+    if (previousName && previousName !== name) {
+      addSystemMessage(`${previousName} is now ${name}.`);
+    } else if (!previousName && announceJoin) addSystemMessage(`${name} joined the chat.`);
   });
 
   socket.on("chat message", (value, acknowledge) => {
@@ -88,8 +104,13 @@ io.on("connection", (socket) => {
     acknowledge?.({ ok: true });
   });
 
-  socket.on("disconnect", () => {
+  socket.on("leave chat", () => {
     if (socket.data.name) addSystemMessage(`${socket.data.name} left the chat.`);
+    socket.disconnect(true);
+  });
+
+  socket.on("disconnect", () => {
+    broadcastOnlineUsers();
   });
 });
 
