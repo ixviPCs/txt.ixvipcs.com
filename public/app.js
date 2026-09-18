@@ -73,6 +73,15 @@ function setName(name, focusMessage = false) {
   });
 }
 
+function submitName(name, focusMessage = false) {
+  if (!socket.connected) {
+    socket.once("connect", () => setName(name, focusMessage));
+    socket.connect();
+    return;
+  }
+  setName(name, focusMessage);
+}
+
 socket.on("history", (history) => {
   messages.replaceChildren();
   history.forEach(renderMessage);
@@ -106,7 +115,7 @@ if (localStorage.getItem(savedNameKey) && !intentionallyLeft) {
 nameForm.addEventListener("submit", (event) => {
   event.preventDefault();
   nameError.textContent = "";
-  setName(nameInput.value, true);
+  submitName(nameInput.value, true);
 });
 
 messageForm.addEventListener("submit", (event) => {
