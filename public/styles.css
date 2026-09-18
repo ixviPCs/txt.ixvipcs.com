@@ -30,6 +30,8 @@ button:disabled { cursor: not-allowed; opacity: .55; }
 .online-users ul { position: absolute; z-index: 1; right: 0; top: 24px; width: 180px; max-height: 230px; overflow-y: auto; margin: 0; padding: 8px; list-style: none; border: 1px solid #46546f; border-radius: 10px; background: #151b26; box-shadow: 0 12px 30px rgba(0,0,0,.35); }
 .online-users li { padding: 7px 8px; overflow-wrap: anywhere; }
 .messages { position: fixed; inset: 64px 0 90px; width: min(100%, 940px); overflow-y: auto; list-style: none; margin: 0 auto; padding: 28px clamp(18px, 4vw, 48px); display: grid; align-content: start; gap: 16px; }
+.messages::-webkit-scrollbar { display: none; }
+.messages { scrollbar-width: none; }
 .message-meta { display: flex; align-items: baseline; gap: 8px; }
 .message-meta time { color: #8792a5; font-size: .75rem; }
 .chat-message p { color: #d5dce7; line-height: 1.45; margin-top: 3px; overflow-wrap: anywhere; }
