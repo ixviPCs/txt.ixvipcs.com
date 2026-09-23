@@ -10,7 +10,7 @@ const deafenButton = document.querySelector("#deafen");
 const leaveButton = document.querySelector("#leave-voice");
 const participants = new Map();
 const connections = new Map();
-const rtcConfig = { iceServers: [{ urls: "stun:stun.l.google.com:19302" }] };
+let rtcConfig = { iceServers: [{ urls: "stun:stun.l.google.com:19302" }] };
 let stream;
 let muted = false;
 let deafened = false;
@@ -164,6 +164,9 @@ async function joinVoice() {
 }
 
 socket.on("connect", () => socket.emit("join", { mode: "create", deviceId }, (result) => {
-  if (!result?.ok) status.textContent = result?.error || "Could not verify your account.";
-  else joinVoice();
+  if (!result?.ok) return status.textContent = result?.error || "Could not verify your account.";
+  socket.emit("voice config", (config) => {
+    if (config?.ok) rtcConfig = { iceServers: config.iceServers };
+    joinVoice();
+  });
 }));

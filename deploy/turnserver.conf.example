@@ -1,0 +1,13 @@
+# Replace TURN_PUBLIC_IP with your home public IPv4 address and TURN_PRIVATE_IP
+# with this Ubuntu machine's LAN address. Keep this file on Ubuntu, not in Git.
+listening-port=3478
+fingerprint
+use-auth-secret
+static-auth-secret=REPLACE_WITH_A_LONG_RANDOM_SECRET
+realm=turn.example.com
+external-ip=TURN_PUBLIC_IP/TURN_PRIVATE_IP
+min-port=49160
+max-port=49200
+no-multicast-peers
+no-loopback-peers
+no-cli

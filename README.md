@@ -8,6 +8,17 @@ New accounts default to `gues-###`. Users can set a nickname and bio from **Prof
 
 IP bans use the address that reaches this Node server. If the app is deployed behind Caddy or another reverse proxy, ensure Node is not publicly reachable and start it with `TRUST_PROXY=1` so its forwarded client-IP header is used. Device bans use a browser-stored random device ID, so clearing browser storage or changing browsers creates a new device ID; they are a deterrent, not hardware-level enforcement.
 
+## Reliable voice with Cloudflare Tunnel
+
+The Tunnel carries the app and WebSocket signaling, but browser-to-browser audio may need a TURN relay. This app supports Coturn's temporary-credential mode: set `TURN_URLS` and `TURN_SHARED_SECRET` in `/etc/open-chat/turn.env` on Ubuntu. Do not put those values in Git. Example:
+
+```bash
+TURN_URLS=turn:turn.example.com:3478?transport=udp,turn:turn.example.com:3478?transport=tcp
+TURN_SHARED_SECRET=replace-with-the-same-long-random-secret-used-by-coturn
+```
+
+Create a DNS-only (not proxied) `turn.example.com` A record pointing at your home public IPv4. Forward TCP and UDP port `3478`, plus UDP ports `49160-49200`, to the Ubuntu server. Copy `deploy/turnserver.conf.example` to `/etc/turnserver.conf`, replace its placeholders, install `coturn`, and restart both `coturn` and `open-chat`. The shared secret lets the app issue one-hour TURN credentials to signed-in chat users without exposing the long-term secret to browsers.
+
 ## Run it locally
 
 1. Install Node.js 20 or newer.

@@ -9,6 +9,7 @@ WorkingDirectory=/home/YOUR_LINUX_USERNAME/open-chat
 Environment=NODE_ENV=production
 Environment=PORT=3000
 Environment=TRUST_PROXY=1
+EnvironmentFile=-/etc/open-chat/turn.env
 ExecStart=/usr/bin/node server.js
 Restart=on-failure
 RestartSec=5
