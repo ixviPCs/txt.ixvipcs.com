@@ -2,5 +2,7 @@ node_modules/
 chat-history.json
 chat-history.json.tmp
 known-users.json
+chat-data.json
+chat-data.json.tmp
 .env
 npm-debug.log*

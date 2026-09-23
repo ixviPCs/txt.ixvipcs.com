@@ -8,6 +8,7 @@ User=YOUR_LINUX_USERNAME
 WorkingDirectory=/home/YOUR_LINUX_USERNAME/open-chat
 Environment=NODE_ENV=production
 Environment=PORT=3000
+Environment=TRUST_PROXY=1
 ExecStart=/usr/bin/node server.js
 Restart=on-failure
 RestartSec=5
