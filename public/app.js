@@ -64,7 +64,6 @@ function renderMessage(message, grouped = false) {
       hoverTime.textContent = timeLabel(message.timestamp) + (message.editedAt ? " · edited" : "");
       item.append(hoverTime);
     }
-    item.append(meta, text);
     if (message.authorId === clientId && message.id) {
       const actions = document.createElement("div");
       actions.className = "message-actions";
@@ -81,6 +80,7 @@ function renderMessage(message, grouped = false) {
       actions.append(edit, remove);
       item.append(actions);
     }
+    item.append(meta, text);
   }
   messages.append(item);
 }
