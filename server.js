@@ -8,7 +8,8 @@ const { Server } = require("socket.io");
 const app = express();
 const server = http.createServer(app);
 const io = new Server(server, {
-  maxHttpBufferSize: 10_000
+  // Profile photos are limited to 1 MB in the browser; base64 adds some overhead.
+  maxHttpBufferSize: 1_500_000
 });
 
 const PORT = Number(process.env.PORT) || 3000;
