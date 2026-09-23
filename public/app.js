@@ -13,6 +13,7 @@ const changeName = document.querySelector("#change-name");
 const leaveChat = document.querySelector("#leave-chat");
 const onlineCount = document.querySelector("#online-count");
 const onlineList = document.querySelector("#online-list");
+const leaveDialog = document.querySelector("#leave-dialog");
 const savedNameKey = "open-chat-display-name";
 const leftChatKey = "open-chat-left";
 let intentionallyLeft = localStorage.getItem(leftChatKey) === "true";
@@ -133,7 +134,11 @@ changeName.addEventListener("click", () => {
 });
 
 leaveChat.addEventListener("click", () => {
-  if (!window.confirm("Leave the chat?")) return;
+  leaveDialog.showModal();
+});
+
+leaveDialog.addEventListener("close", () => {
+  if (leaveDialog.returnValue !== "confirm") return;
   intentionallyLeft = false;
   localStorage.setItem(leftChatKey, "true");
   intentionallyLeft = true;

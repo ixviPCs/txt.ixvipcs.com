@@ -61,6 +61,15 @@ function addSystemMessage(text) {
   io.emit("message", message);
 }
 
+function voiceParticipants() {
+  return [...(io.sockets.adapter.rooms.get("voice") || [])]
+    .map((socketId) => {
+      const participant = io.sockets.sockets.get(socketId);
+      return participant && { id: socketId, name: participant.data.voiceName };
+    })
+    .filter(Boolean);
+}
+
 io.on("connection", (socket) => {
   socket.emit("history", messages);
   socket.emit("online users", onlineUsers());
@@ -109,7 +118,33 @@ io.on("connection", (socket) => {
     socket.disconnect(true);
   });
 
+  socket.on("voice join", (value, acknowledge) => {
+    const name = cleanText(value, MAX_NAME_LENGTH);
+    if (!name) {
+      acknowledge?.({ ok: false, error: "Choose a display name first." });
+      return;
+    }
+
+    const peers = voiceParticipants();
+    socket.data.voiceName = name;
+    socket.join("voice");
+    socket.emit("voice participants", peers);
+    acknowledge?.({ ok: true, name });
+  });
+
+  socket.on("voice signal", ({ target, signal }) => {
+    if (!socket.rooms.has("voice") || typeof target !== "string" || !signal) return;
+    io.to(target).emit("voice signal", { from: socket.id, name: socket.data.voiceName, signal });
+  });
+
+  socket.on("voice leave", () => {
+    if (!socket.rooms.has("voice")) return;
+    socket.to("voice").emit("voice participant left", socket.id);
+    socket.leave("voice");
+  });
+
   socket.on("disconnect", () => {
+    if (socket.data.voiceName) socket.to("voice").emit("voice participant left", socket.id);
     broadcastOnlineUsers();
   });
 });

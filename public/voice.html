@@ -1,0 +1,32 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Voice Chat</title>
+    <link rel="stylesheet" href="styles.css" />
+  </head>
+  <body class="voice-page">
+    <main class="voice-shell">
+      <header class="chat-topbar">
+        <span id="voice-identity">Voice chat</span>
+        <div class="room-actions">
+          <details class="online-users">
+            <summary><span id="voice-count">0 in voice</span></summary>
+            <ul id="voice-list" aria-label="People in voice chat"></ul>
+          </details>
+          <a class="text-button" href="/">Back to chat</a>
+        </div>
+      </header>
+      <p id="voice-status" class="voice-status" role="status">Connecting your microphone…</p>
+      <section id="voice-grid" class="voice-grid" aria-label="Voice participants"></section>
+      <div class="voice-controls" aria-label="Voice controls">
+        <button id="mute" type="button">Mute</button>
+        <button id="deafen" type="button" class="secondary-button">Deafen</button>
+        <button id="leave-voice" type="button" class="danger-button">Leave</button>
+      </div>
+    </main>
+    <script src="/socket.io/socket.io.js"></script>
+    <script src="voice.js"></script>
+  </body>
+</html>

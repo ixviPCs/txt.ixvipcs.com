@@ -30,6 +30,7 @@
               <ul id="online-list" aria-label="People online"></ul>
             </details>
             <button id="change-name" class="text-button" type="button">Change name</button>
+            <a class="text-button voice-button" href="voice.html" target="_blank" rel="noopener" aria-label="Join voice chat">☎ Voice</a>
             <button id="leave-chat" class="text-button leave-button" type="button">Leave chat</button>
           </div>
         </div>
@@ -42,6 +43,16 @@
         <p id="chat-error" class="error" role="alert"></p>
       </section>
     </main>
+    <dialog id="leave-dialog" class="confirm-dialog" aria-labelledby="leave-title">
+      <form method="dialog">
+        <h2 id="leave-title">Leave chat?</h2>
+        <p>You can rejoin whenever you want.</p>
+        <div class="dialog-actions">
+          <button value="cancel" class="secondary-button">Cancel</button>
+          <button id="confirm-leave" value="confirm" class="danger-button">Leave chat</button>
+        </div>
+      </form>
+    </dialog>
     <script src="/socket.io/socket.io.js"></script>
     <script src="app.js"></script>
   </body>
