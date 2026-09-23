@@ -1,5 +1,6 @@
 node_modules/
 chat-history.json
 chat-history.json.tmp
+known-users.json
 .env
 npm-debug.log*

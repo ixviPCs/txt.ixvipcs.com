@@ -36,12 +36,24 @@ button:disabled { cursor: not-allowed; opacity: .55; }
 .online-users[open] summary::after { content: "▴"; }
 .online-users ul { position: absolute; z-index: 1; right: 0; top: 24px; width: 180px; max-height: 230px; overflow-y: auto; margin: 0; padding: 8px; list-style: none; border: 1px solid #46546f; border-radius: 10px; background: #151b26; box-shadow: 0 12px 30px rgba(0,0,0,.35); }
 .online-users li { padding: 7px 8px; overflow-wrap: anywhere; }
+.online-users li { display: flex; align-items: center; gap: 8px; }
+.status-dot { width: 9px; height: 9px; flex: 0 0 9px; border-radius: 50%; background: #778196; }
+.status-online .status-dot { background: #65cf96; box-shadow: 0 0 8px #65cf9699; }
+.status-away .status-dot { background: #e6ad4e; box-shadow: 0 0 8px #e6ad4e88; }
 .messages { position: fixed; inset: 64px 0 90px; width: min(100%, 940px); overflow-y: auto; list-style: none; margin: 0 auto; padding: 28px clamp(18px, 4vw, 48px); display: grid; align-content: start; gap: 16px; }
 .messages::-webkit-scrollbar { display: none; }
 .messages { scrollbar-width: none; }
 .message-meta { display: flex; align-items: baseline; gap: 8px; }
 .message-meta time { color: #8792a5; font-size: .75rem; }
 .chat-message p { color: #d5dce7; line-height: 1.45; margin-top: 3px; overflow-wrap: anywhere; }
+.chat-message { position: relative; }
+.grouped-message { padding-left: 72px; }
+.grouped-time { position: absolute; left: 0; top: 2px; color: #8792a5; font-size: .75rem; opacity: 0; transition: opacity .15s; }
+.grouped-message:hover .grouped-time { opacity: 1; }
+.message-actions { display: flex; gap: 8px; margin-top: 5px; opacity: .35; transition: opacity .15s; }
+.chat-message:hover .message-actions, .message-actions:focus-within { opacity: 1; }
+.message-action { padding: 0; border: 0; background: none; color: #91b8ff; font-size: .78rem; font-weight: 650; }
+.delete-action { color: #ffabb7; }
 .system-message { color: #8f9aad; font-size: .82rem; text-align: center; }
 .message-form { position: fixed; z-index: 2; bottom: 22px; left: 50%; width: min(calc(100vw - 32px), clamp(350px, 34vw, 620px)); transform: translateX(-50%); align-items: center; padding: 6px; border: 1px solid #46546f; border-radius: 999px; background: rgba(21, 27, 38, .96); box-shadow: 0 14px 36px rgba(0,0,0,.32); }
 .message-form input { border: 0; border-radius: 999px; background: transparent; padding: 11px 14px; }

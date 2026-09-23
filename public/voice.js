@@ -150,7 +150,7 @@ async function joinVoice() {
     addCard(socket.id, name, true);
     monitorAudio(socket.id, stream);
     updatePeople();
-    socket.emit("voice join", name, (result) => {
+    socket.emit("voice join", { name, clientId: localStorage.getItem("open-chat-client-id") }, (result) => {
       if (!result?.ok) status.textContent = result?.error || "Could not join voice.";
       else status.textContent = "You are connected.";
     });

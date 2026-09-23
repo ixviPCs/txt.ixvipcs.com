@@ -2,6 +2,7 @@ const express = require("express");
 const fs = require("fs");
 const http = require("http");
 const path = require("path");
+const { randomUUID } = require("crypto");
 const { Server } = require("socket.io");
 
 const app = express();
@@ -14,7 +15,9 @@ const PORT = Number(process.env.PORT) || 3000;
 const MAX_NAME_LENGTH = 24;
 const MAX_MESSAGE_LENGTH = 1_000;
 const HISTORY_FILE = path.join(__dirname, "chat-history.json");
+const USERS_FILE = path.join(__dirname, "known-users.json");
 const messages = loadHistory();
+const knownUsers = loadJson(USERS_FILE, {});
 
 app.use(express.static(path.join(__dirname, "public")));
 
@@ -33,6 +36,14 @@ function loadHistory() {
   }
 }
 
+function loadJson(file, fallback) {
+  try { return JSON.parse(fs.readFileSync(file, "utf8")); }
+  catch (error) {
+    if (error.code !== "ENOENT") console.error(`Could not read ${file}:`, error.message);
+    return fallback;
+  }
+}
+
 function saveHistory() {
   try {
     const temporaryFile = `${HISTORY_FILE}.tmp`;
@@ -43,15 +54,54 @@ function saveHistory() {
   }
 }
 
-function onlineUsers() {
-  return [...io.sockets.sockets.values()]
-    .map((connectedSocket) => connectedSocket.data.name)
-    .filter(Boolean)
-    .sort((first, second) => first.localeCompare(second));
+function saveUsers() {
+  try { fs.writeFileSync(USERS_FILE, JSON.stringify(knownUsers), "utf8"); }
+  catch (error) { console.error("Could not save known users:", error.message); }
 }
 
-function broadcastOnlineUsers() {
-  io.emit("online users", onlineUsers());
+function cleanClientId(value) {
+  return typeof value === "string" && /^[a-z0-9-]{16,80}$/i.test(value) ? value : "";
+}
+
+function socketsFor(clientId) {
+  return [...io.sockets.sockets.values()].filter((connectedSocket) => connectedSocket.data.clientId === clientId);
+}
+
+function voiceClientIds() {
+  return new Set([...(io.sockets.adapter.rooms.get("voice") || [])]
+    .map((socketId) => io.sockets.sockets.get(socketId)?.data.clientId)
+    .filter(Boolean));
+}
+
+function presenceUsers() {
+  const inVoice = voiceClientIds();
+  return Object.entries(knownUsers).map(([id, user]) => {
+    const sockets = socketsFor(id);
+    const status = sockets.length === 0 ? "offline" : sockets.some((item) => item.data.visibility === "online") ? "online" : "away";
+    return { id, name: user.name, status, voice: inVoice.has(id) };
+  }).sort((first, second) => first.name.localeCompare(second.name));
+}
+
+function broadcastPresence() {
+  io.emit("presence users", presenceUsers());
+}
+
+function bindIdentity(socket, requestedName, requestedClientId) {
+  const clientId = cleanClientId(requestedClientId);
+  const name = cleanText(requestedName, MAX_NAME_LENGTH);
+  if (!clientId || !name) return { error: "Choose a display name first." };
+  const duplicate = Object.entries(knownUsers).find(([id, user]) => id !== clientId && user.name.toLocaleLowerCase() === name.toLocaleLowerCase());
+  if (duplicate) return { error: "That display name is already in use." };
+
+  const oldName = knownUsers[clientId]?.name;
+  socket.data.clientId = clientId;
+  socket.data.name = name;
+  socket.data.visibility ||= "online";
+  socket.join(`identity:${clientId}`);
+  knownUsers[clientId] = { name, lastSeen: Date.now() };
+  saveUsers();
+  io.to(`identity:${clientId}`).emit("identity name", name);
+  return { clientId, name, oldName };
 }
 
 function addSystemMessage(text) {
@@ -65,31 +115,29 @@ function voiceParticipants() {
   return [...(io.sockets.adapter.rooms.get("voice") || [])]
     .map((socketId) => {
       const participant = io.sockets.sockets.get(socketId);
-      return participant && { id: socketId, name: participant.data.voiceName };
+      return participant && { id: socketId, name: participant.data.name, clientId: participant.data.clientId };
     })
     .filter(Boolean);
 }
 
 io.on("connection", (socket) => {
   socket.emit("history", messages);
-  socket.emit("online users", onlineUsers());
+  socket.emit("presence users", presenceUsers());
 
   socket.on("set name", (value, acknowledge) => {
     const requestedName = typeof value === "object" && value ? value.name : value;
+    const requestedClientId = typeof value === "object" && value ? value.clientId : "";
     const announceJoin = Boolean(typeof value === "object" && value?.announceJoin);
-    const name = cleanText(requestedName, MAX_NAME_LENGTH);
-    if (!name) {
-      acknowledge?.({ ok: false, error: "Choose a display name first." });
+    const previousConnections = cleanClientId(requestedClientId) ? socketsFor(requestedClientId).filter((item) => item.id !== socket.id).length : 0;
+    const identity = bindIdentity(socket, requestedName, requestedClientId);
+    if (identity.error) {
+      acknowledge?.({ ok: false, error: identity.error });
       return;
     }
-
-    const previousName = socket.data.name;
-    socket.data.name = name;
-    acknowledge?.({ ok: true, name });
-    broadcastOnlineUsers();
-    if (previousName && previousName !== name) {
-      addSystemMessage(`${previousName} is now ${name}.`);
-    } else if (!previousName && announceJoin) addSystemMessage(`${name} joined the chat.`);
+    acknowledge?.({ ok: true, name: identity.name });
+    broadcastPresence();
+    if (identity.oldName && identity.oldName !== identity.name) addSystemMessage(`${identity.oldName} is now ${identity.name}.`);
+    else if (announceJoin && previousConnections === 0) addSystemMessage(`${identity.name} joined the chat.`);
   });
 
   socket.on("chat message", (value, acknowledge) => {
@@ -103,6 +151,8 @@ io.on("connection", (socket) => {
 
     const message = {
       type: "chat",
+      id: randomUUID(),
+      authorId: socket.data.clientId,
       name: socket.data.name,
       text,
       timestamp: Date.now()
@@ -113,39 +163,67 @@ io.on("connection", (socket) => {
     acknowledge?.({ ok: true });
   });
 
+  socket.on("edit message", ({ id, text }, acknowledge) => {
+    const message = messages.find((item) => item.id === id && item.authorId === socket.data.clientId);
+    const updatedText = cleanText(text, MAX_MESSAGE_LENGTH);
+    if (!message || !updatedText) return acknowledge?.({ ok: false, error: "Message could not be edited." });
+    message.text = updatedText;
+    message.editedAt = Date.now();
+    saveHistory();
+    io.emit("message updated", { id, text: updatedText, editedAt: message.editedAt });
+    acknowledge?.({ ok: true });
+  });
+
+  socket.on("delete message", ({ id }, acknowledge) => {
+    const index = messages.findIndex((item) => item.id === id && item.authorId === socket.data.clientId);
+    if (index === -1) return acknowledge?.({ ok: false, error: "Message could not be deleted." });
+    messages.splice(index, 1);
+    saveHistory();
+    io.emit("message deleted", id);
+    acknowledge?.({ ok: true });
+  });
+
   socket.on("leave chat", () => {
-    if (socket.data.name) addSystemMessage(`${socket.data.name} left the chat.`);
+    if (socket.data.name && socketsFor(socket.data.clientId).filter((item) => item.id !== socket.id).length === 0) addSystemMessage(`${socket.data.name} left the chat.`);
     socket.disconnect(true);
   });
 
+  socket.on("presence state", (state) => {
+    if (!socket.data.clientId) return;
+    socket.data.visibility = state === "away" ? "away" : "online";
+    broadcastPresence();
+  });
+
   socket.on("voice join", (value, acknowledge) => {
-    const name = cleanText(value, MAX_NAME_LENGTH);
-    if (!name) {
-      acknowledge?.({ ok: false, error: "Choose a display name first." });
+    const identity = bindIdentity(socket, value?.name, value?.clientId);
+    if (identity.error) {
+      acknowledge?.({ ok: false, error: identity.error });
       return;
     }
+    if (voiceParticipants().some((participant) => participant.clientId === identity.clientId)) return acknowledge?.({ ok: false, error: "You are already in voice chat in another tab." });
 
     const peers = voiceParticipants();
-    socket.data.voiceName = name;
     socket.join("voice");
     socket.emit("voice participants", peers);
-    acknowledge?.({ ok: true, name });
+    broadcastPresence();
+    acknowledge?.({ ok: true, name: identity.name });
   });
 
   socket.on("voice signal", ({ target, signal }) => {
     if (!socket.rooms.has("voice") || typeof target !== "string" || !signal) return;
-    io.to(target).emit("voice signal", { from: socket.id, name: socket.data.voiceName, signal });
+    io.to(target).emit("voice signal", { from: socket.id, name: socket.data.name, signal });
   });
 
   socket.on("voice leave", () => {
     if (!socket.rooms.has("voice")) return;
     socket.to("voice").emit("voice participant left", socket.id);
     socket.leave("voice");
+    broadcastPresence();
   });
 
   socket.on("disconnect", () => {
-    if (socket.data.voiceName) socket.to("voice").emit("voice participant left", socket.id);
-    broadcastOnlineUsers();
+    if (socket.rooms.has("voice")) socket.to("voice").emit("voice participant left", socket.id);
+    broadcastPresence();
   });
 });
 
