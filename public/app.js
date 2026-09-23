@@ -1,283 +1,40 @@
 const socket = io();
-const namePanel = document.querySelector("#name-panel");
-const chatPanel = document.querySelector("#chat-panel");
-const nameForm = document.querySelector("#name-form");
-const messageForm = document.querySelector("#message-form");
-const nameInput = document.querySelector("#name");
-const avatarInput = document.querySelector("#avatar");
-const messageInput = document.querySelector("#message");
-const messages = document.querySelector("#messages");
-const identity = document.querySelector("#identity");
-const profileAvatar = document.querySelector("#profile-avatar");
-const nameError = document.querySelector("#name-error");
-const chatError = document.querySelector("#chat-error");
-const changeName = document.querySelector("#change-name");
-const leaveChat = document.querySelector("#leave-chat");
-const onlineCount = document.querySelector("#online-count");
-const onlineList = document.querySelector("#online-list");
-const leaveDialog = document.querySelector("#leave-dialog");
-const voiceButton = document.querySelector(".voice-button");
-const savedNameKey = "open-chat-display-name";
-const clientIdKey = "open-chat-client-id";
-const leftChatKey = "open-chat-left";
-let intentionallyLeft = localStorage.getItem(leftChatKey) === "true";
-let chatHistory = [];
-const profiles = new Map();
-let avatarData = localStorage.getItem("open-chat-avatar") || "";
-let clientId = localStorage.getItem(clientIdKey);
-if (!clientId) {
-  clientId = crypto.randomUUID();
-  localStorage.setItem(clientIdKey, clientId);
-}
-
-function timeLabel(timestamp) {
-  return new Intl.DateTimeFormat([], { hour: "numeric", minute: "2-digit" }).format(timestamp);
-}
-
-function renderHistory() {
-  messages.replaceChildren();
-  let previousChatMessage;
-  chatHistory.forEach((message) => {
-    const grouped = message.type === "chat" && Boolean(message.authorId) && previousChatMessage?.authorId === message.authorId && message.timestamp - previousChatMessage.timestamp <= 180_000;
-    renderMessage(message, grouped);
-    if (message.type === "chat") previousChatMessage = message;
-  });
-  messages.scrollTop = messages.scrollHeight;
-}
-
-function renderMessage(message, grouped = false) {
-  const item = document.createElement("li");
-  if (message.id) item.dataset.messageId = message.id;
-  if (message.type === "system") {
-    item.className = "system-message";
-    item.textContent = message.text;
-  } else {
-    item.className = `chat-message${grouped ? " grouped-message" : ""}`;
-    const meta = document.createElement("div");
-    meta.className = "message-meta";
-    const author = document.createElement("strong");
-    author.textContent = message.name;
-    const time = document.createElement("time");
-    time.textContent = timeLabel(message.timestamp) + (message.editedAt ? " · edited" : "");
-    if (!grouped) {
-      const avatar = profiles.get(message.authorId)?.avatar || message.avatar;
-      if (avatar) {
-        const image = document.createElement("img");
-        image.className = "message-avatar";
-        image.src = avatar;
-        image.alt = "";
-        meta.append(image);
-      }
-      meta.append(author);
-      meta.append(time);
-    }
-    const text = document.createElement("p");
-    text.textContent = message.text;
-    if (grouped) {
-      const hoverTime = document.createElement("time");
-      hoverTime.className = "grouped-time";
-      hoverTime.textContent = timeLabel(message.timestamp) + (message.editedAt ? " · edited" : "");
-      item.append(hoverTime);
-    }
-    if (message.authorId === clientId && message.id) {
-      const actions = document.createElement("div");
-      actions.className = "message-actions";
-      const edit = document.createElement("button");
-      edit.className = "message-action";
-      edit.type = "button";
-      edit.textContent = "Edit";
-      edit.addEventListener("click", () => editMessage(message));
-      const remove = document.createElement("button");
-      remove.className = "message-action delete-action";
-      remove.type = "button";
-      remove.textContent = "Delete";
-      remove.addEventListener("click", () => deleteMessage(message.id));
-      actions.append(edit, remove);
-      item.append(actions);
-    }
-    item.append(meta, text);
-  }
-  messages.append(item);
-}
-
-function editMessage(message) {
-  const text = window.prompt("Edit your message:", message.text);
-  if (text === null || text.trim() === message.text) return;
-  socket.emit("edit message", { id: message.id, text }, (result) => {
-    if (!result?.ok) chatError.textContent = result?.error || "Message could not be edited.";
-  });
-}
-
-function deleteMessage(id) {
-  if (!window.confirm("Delete this message?")) return;
-  socket.emit("delete message", { id }, (result) => {
-    if (!result?.ok) chatError.textContent = result?.error || "Message could not be deleted.";
-  });
-}
-
-function enterChat(name) {
-  identity.textContent = `Chatting as ${name}`;
-  profileAvatar.src = avatarData;
-  profileAvatar.hidden = !avatarData;
-  namePanel.hidden = true;
-  chatPanel.hidden = false;
-  messageInput.disabled = false;
-  document.querySelector("#send").disabled = false;
-  changeName.disabled = false;
-}
-
-function showNamePanel() {
-  chatPanel.hidden = true;
-  namePanel.hidden = false;
-  nameInput.value = localStorage.getItem(savedNameKey) || "";
-  nameInput.focus();
-}
-
-function setName(name, focusMessage = false) {
-  socket.emit("set name", { name, clientId, avatar: avatarData, announceJoin: intentionallyLeft }, (result) => {
-    if (!result?.ok) {
-      nameError.textContent = result?.error || "Could not save your name.";
-      return;
-    }
-    localStorage.setItem(savedNameKey, result.name);
-    intentionallyLeft = false;
-    localStorage.removeItem(leftChatKey);
-    enterChat(result.name);
-    if (focusMessage) messageInput.focus();
-  });
-}
-
-function submitName(name, focusMessage = false) {
-  if (!socket.connected) {
-    socket.once("connect", () => setName(name, focusMessage));
-    socket.connect();
-    return;
-  }
-  setName(name, focusMessage);
-}
-
-socket.on("history", (receivedHistory) => {
-  chatHistory = receivedHistory;
-  receivedHistory.forEach((message) => {
-    if (message.authorId && message.avatar) profiles.set(message.authorId, { name: message.name, avatar: message.avatar });
-  });
-  renderHistory();
-});
-socket.on("message", (message) => {
-  chatHistory.push(message);
-  renderHistory();
-});
-socket.on("message updated", ({ id, text, editedAt }) => {
-  const message = chatHistory.find((item) => item.id === id);
-  if (!message) return;
-  message.text = text;
-  message.editedAt = editedAt;
-  renderHistory();
-});
-socket.on("message deleted", (id) => {
-  chatHistory = chatHistory.filter((item) => item.id !== id);
-  renderHistory();
-});
-socket.on("presence users", (users) => {
-  const online = users.filter((user) => user.status === "online").length;
-  onlineCount.textContent = `${online} online`;
-  const voiceNames = users.filter((user) => user.voice).map((user) => user.name);
-  voiceButton.title = voiceNames.length ? `In voice: ${voiceNames.join(", ")}` : "Nobody is in voice chat.";
-  onlineList.replaceChildren();
-  users.forEach((user) => {
-    const person = document.createElement("li");
-    person.className = `status-${user.status}`;
-    const dot = document.createElement("span");
-    dot.className = "status-dot";
-    const label = document.createElement("span");
-    label.textContent = `${user.name} · ${user.status}${user.voice ? " · in voice" : ""}`;
-    person.append(dot, label);
-    onlineList.append(person);
-  });
-});
-socket.on("identity name", (name) => {
-  localStorage.setItem(savedNameKey, name);
-  identity.textContent = `Chatting as ${name}`;
-});
-socket.on("user profile updated", (profile) => {
-  profiles.set(profile.id, profile);
-  if (profile.id === clientId) {
-    avatarData = profile.avatar;
-    profileAvatar.src = avatarData;
-    profileAvatar.hidden = !avatarData;
-  }
-  renderHistory();
-});
-socket.on("connect", () => {
-  chatError.textContent = "";
-  const savedName = localStorage.getItem(savedNameKey);
-  if (savedName && !intentionallyLeft) setName(savedName);
-});
-socket.on("disconnect", () => {
-  if (intentionallyLeft) return;
-  chatError.textContent = "Connection lost. Reconnecting…";
-});
-
-function updatePresence() {
-  if (socket.connected) socket.emit("presence state", document.visibilityState === "visible" ? "online" : "away");
-}
-document.addEventListener("visibilitychange", updatePresence);
-window.addEventListener("focus", updatePresence);
-window.addEventListener("blur", updatePresence);
-
-if (localStorage.getItem(savedNameKey) && !intentionallyLeft) {
-  chatPanel.hidden = false;
-} else {
-  showNamePanel();
-}
-
-nameForm.addEventListener("submit", (event) => {
-  event.preventDefault();
-  nameError.textContent = "";
-  submitName(nameInput.value, true);
-});
-
-avatarInput.addEventListener("change", () => {
-  const file = avatarInput.files[0];
-  if (!file) return;
-  if (file.size > 1_000_000) {
-    nameError.textContent = "Choose an image smaller than 1 MB.";
-    avatarInput.value = "";
-    return;
-  }
-  const reader = new FileReader();
-  reader.addEventListener("load", () => {
-    avatarData = reader.result;
-    try { localStorage.setItem("open-chat-avatar", avatarData); }
-    catch { nameError.textContent = "That image is too large to save in this browser."; }
-  });
-  reader.readAsDataURL(file);
-});
-
-messageForm.addEventListener("submit", (event) => {
-  event.preventDefault();
-  chatError.textContent = "";
-  socket.emit("chat message", messageInput.value, (result) => {
-    if (!result?.ok) chatError.textContent = result?.error || "Message could not be sent.";
-  });
-  messageInput.value = "";
-  messageInput.focus();
-});
-
-changeName.addEventListener("click", () => {
-  showNamePanel();
-});
-
-leaveChat.addEventListener("click", () => {
-  leaveDialog.showModal();
-});
-
-leaveDialog.addEventListener("close", () => {
-  if (leaveDialog.returnValue !== "confirm") return;
-  intentionallyLeft = false;
-  localStorage.setItem(leftChatKey, "true");
-  intentionallyLeft = true;
-  socket.emit("leave chat");
-  chatError.textContent = "";
-  showNamePanel();
-});
+const $ = (selector) => document.querySelector(selector);
+const namePanel = $("#name-panel"), chatPanel = $("#chat-panel"), nameForm = $("#name-form"), nameInput = $("#name"), pinInput = $("#pin"), avatarInput = $("#avatar"), messageForm = $("#message-form"), messageInput = $("#message"), messagesEl = $("#messages");
+const nameError = $("#name-error"), chatError = $("#chat-error"), identity = $("#identity"), profileAvatar = $("#profile-avatar"), profileDialog = $("#profile-dialog"), profileForm = $("#profile-form"), profileError = $("#profile-error");
+const deviceKey = "open-chat-device-id", accountKey = "open-chat-account-id", avatarKey = "open-chat-avatar";
+let deviceId = localStorage.getItem(deviceKey), accountId = localStorage.getItem(accountKey), account, avatarData = localStorage.getItem(avatarKey) || "", history = [], profiles = new Map(), profileTarget, moderationTargets = {};
+if (!deviceId) { deviceId = crypto.randomUUID(); localStorage.setItem(deviceKey, deviceId); }
+function display(profile) { return profile.nickname || profile.name; }
+function timeLabel(time) { return new Intl.DateTimeFormat([], { hour: "numeric", minute: "2-digit" }).format(time); }
+function profileButton(id, label, className = "") { const button = document.createElement("button"); button.type = "button"; button.className = className; button.textContent = label; button.addEventListener("click", () => openProfile(id)); return button; }
+function renderHistory() { messagesEl.replaceChildren(); let previous; history.forEach((message) => { const grouped = message.type === "chat" && previous?.authorId === message.authorId && message.timestamp - previous.timestamp <= 180000; renderMessage(message, grouped); if (message.type === "chat") previous = message; }); messagesEl.scrollTop = messagesEl.scrollHeight; }
+function renderMessage(message, grouped) { const item = document.createElement("li"); if (message.type === "system") { item.className = "system-message"; item.textContent = message.text; messagesEl.append(item); return; } item.className = `chat-message${grouped ? " grouped-message" : ""}`; item.dataset.messageId = message.id;
+  const meta = document.createElement("div"); meta.className = "message-meta"; const current = profiles.get(message.authorId) || message;
+  if (!grouped) { if (current.avatar) { const image = document.createElement("img"); image.className = "message-avatar profile-trigger"; image.src = current.avatar; image.alt = `${display(current)}'s profile`; image.addEventListener("click", () => openProfile(message.authorId)); meta.append(image); } const author = profileButton(message.authorId, display(current), "profile-name"); meta.append(author); if (current.nickname) { const real = document.createElement("small"); real.className = "real-name"; real.textContent = current.name; meta.append(real); } const time = document.createElement("time"); time.textContent = timeLabel(message.timestamp) + (message.editedAt ? " · edited" : ""); meta.append(time); }
+  const text = document.createElement("p"); text.textContent = message.text; item.append(meta, text);
+  if (message.authorId === accountId || account?.admin) { const actions = document.createElement("div"); actions.className = "message-actions"; const edit = document.createElement("button"); edit.className = "message-action"; edit.textContent = "Edit"; edit.onclick = () => editMessage(message); const remove = document.createElement("button"); remove.className = "message-action delete-action"; remove.textContent = "Delete"; remove.onclick = () => deleteMessage(message.id); actions.append(edit, remove); item.append(actions); } messagesEl.append(item); }
+function enterChat() { namePanel.hidden = true; chatPanel.hidden = false; $("#send").disabled = false; messageInput.disabled = false; identity.textContent = `Chatting as ${display(account)}`; profileAvatar.src = account.avatar || avatarData; profileAvatar.hidden = !(account.avatar || avatarData); }
+function join(mode = "create") { nameError.textContent = ""; socket.emit("join", { mode, deviceId, name: nameInput.value, pin: pinInput.value, avatar: avatarData }, (result) => { if (!result?.ok) return nameError.textContent = result?.error || "Could not join."; account = result.account; accountId = account.id; localStorage.setItem(accountKey, accountId); localStorage.setItem("open-chat-display-name", account.name); enterChat(); }); }
+function updateProfileView(profile) { profiles.set(profile.id, profile); if (profile.id === accountId) { account = profile; avatarData = profile.avatar || avatarData; identity.textContent = `Chatting as ${display(profile)}`; profileAvatar.src = profile.avatar || ""; profileAvatar.hidden = !profile.avatar; } renderHistory(); }
+function openProfile(id) { socket.emit("get profile", id, (result) => { if (!result?.ok) return; profileTarget = result.profile; moderationTargets = result.moderationTargets || {}; const own = id === accountId; const adminEditing = account?.admin && !own; $("#profile-title").textContent = own ? "Your profile" : `${display(profileTarget)}'s profile`; $("#profile-name").value = profileTarget.name; $("#profile-name").disabled = !(account?.admin); $("#profile-nickname").value = profileTarget.nickname; $("#profile-bio").value = profileTarget.bio; $("#profile-pin").value = ""; $("#dialog-avatar").src = profileTarget.avatar || ""; $("#dialog-avatar").hidden = !profileTarget.avatar; $("#admin-controls").hidden = !account?.admin || own; $("#profile-nickname").disabled = !own && !adminEditing; $("#profile-bio").disabled = !own && !adminEditing; $("#profile-pin").disabled = !own && !adminEditing; $("#profile-error").textContent = ""; profileDialog.showModal(); }); }
+function editMessage(message) { const text = prompt("Edit message:", message.text); if (text && text !== message.text) socket.emit("edit message", { id: message.id, text }, result => { if (!result?.ok) chatError.textContent = result?.error; }); }
+function deleteMessage(id) { if (confirm("Delete this message?")) socket.emit("delete message", { id }, result => { if (!result?.ok) chatError.textContent = result?.error; }); }
+socket.on("history", (items) => { history = items; items.forEach((item) => item.authorId && profiles.set(item.authorId, { id: item.authorId, name: item.name, nickname: item.nickname || "", avatar: item.avatar || "" })); renderHistory(); });
+socket.on("message", (message) => { history.push(message); profiles.set(message.authorId, { id: message.authorId, name: message.name, nickname: message.nickname || "", avatar: message.avatar || "" }); renderHistory(); });
+socket.on("message updated", ({ id, text, editedAt }) => { const item = history.find((message) => message.id === id); if (item) { item.text = text; item.editedAt = editedAt; renderHistory(); } });
+socket.on("message deleted", (id) => { history = history.filter((message) => message.id !== id); renderHistory(); });
+socket.on("user profile updated", updateProfileView);
+socket.on("presence users", (users) => { $("#online-count").textContent = `${users.filter((user) => user.status === "online").length} online`; const list = $("#online-list"); list.replaceChildren(); users.forEach((user) => { profiles.set(user.id, user); const item = document.createElement("li"); item.className = `status-${user.status}`; const dot = document.createElement("span"); dot.className = "status-dot"; const label = profileButton(user.id, `${display(user)} · ${user.status}${user.voice ? " · in voice" : ""}`, "online-profile"); item.append(dot, label); list.append(item); }); });
+socket.on("connect", () => { chatError.textContent = ""; if (accountId) socket.emit("join", { mode: "create", deviceId }, (result) => { if (result?.ok) { account = result.account; enterChat(); } else { localStorage.removeItem(accountKey); accountId = null; } }); });
+socket.on("disconnect", () => { if (accountId) chatError.textContent = "Connection lost. Reconnecting…"; });
+nameForm.onsubmit = (event) => { event.preventDefault(); join("create"); };
+$("#other-device").onclick = () => { nameError.textContent = "Enter the existing account name and its PIN, then press Join chat."; join("sign-in"); };
+avatarInput.onchange = () => { const file = avatarInput.files[0]; if (!file) return; if (file.size > 1000000) return nameError.textContent = "Choose an image smaller than 1 MB."; const reader = new FileReader(); reader.onload = () => { avatarData = reader.result; localStorage.setItem(avatarKey, avatarData); }; reader.readAsDataURL(file); };
+messageForm.onsubmit = (event) => { event.preventDefault(); socket.emit("chat message", messageInput.value, (result) => { if (!result?.ok) chatError.textContent = result?.error; }); messageInput.value = ""; };
+$("#profile-button").onclick = () => openProfile(accountId); profileAvatar.onclick = () => openProfile(accountId); $("#close-profile").onclick = () => profileDialog.close();
+profileForm.onsubmit = (event) => { event.preventDefault(); const request = { accountId: profileTarget.id, nickname: $("#profile-nickname").value, bio: $("#profile-bio").value, pin: $("#profile-pin").value }; if (account?.admin) request.name = $("#profile-name").value; socket.emit("update profile", request, (result) => { if (!result?.ok) return profileError.textContent = result?.error; updateProfileView(result.profile); profileDialog.close(); }); };
+$("#ban-button").onclick = () => { const kind = $("#ban-kind").value; const target = kind === "account" ? profileTarget.id : moderationTargets[kind]; if (!target) return profileError.textContent = `No ${kind} is currently available for this account.`; socket.emit("ban", { kind, target, durationMinutes: Number($("#ban-duration").value) }, (result) => { if (!result?.ok) profileError.textContent = result?.error; else profileDialog.close(); }); };
+$("#leave-chat").onclick = () => $("#leave-dialog").showModal(); $("#leave-dialog").onclose = () => { if ($("#leave-dialog").returnValue === "confirm") { socket.emit("leave chat"); chatPanel.hidden = true; namePanel.hidden = false; accountId = null; localStorage.removeItem(accountKey); } };
+document.addEventListener("visibilitychange", () => socket.connected && socket.emit("presence state", document.visibilityState === "visible" ? "online" : "away"));
+if (!accountId) nameInput.value = `gues-${Math.floor(100 + Math.random() * 900)}`;

@@ -1,6 +1,12 @@
 # Open Chat
 
-A simple display-name-based real-time chat room. Each browser remembers its chosen display name locally, and the server saves chat history in `chat-history.json` so it survives restarts. That history file stays only on the server and is intentionally excluded from Git.
+A small real-time chat room with server-owned accounts, profiles, and moderation. The first account on a browser is permanently linked to that browser's device ID; signing in to an existing account from a new browser requires its PIN. Account data, bans, and chat history are stored together in `chat-data.json` on the server.
+
+New accounts default to `gues-###`. Users can set a nickname and bio from **Profile**; the permanent account name stays visible below a nickname in chat. A PIN must be 4–6 ASCII letters or digits. PINs `8210` and `82111` make the account an admin, with message moderation, profile editing, and account/device/IP bans.
+
+## Moderation notes
+
+IP bans use the address that reaches this Node server. If the app is deployed behind Caddy or another reverse proxy, ensure Node is not publicly reachable and start it with `TRUST_PROXY=1` so its forwarded client-IP header is used. Device bans use a browser-stored random device ID, so clearing browser storage or changing browsers creates a new device ID; they are a deterrent, not hardware-level enforcement.
 
 ## Run it locally
 

@@ -2,249 +2,69 @@ const express = require("express");
 const fs = require("fs");
 const http = require("http");
 const path = require("path");
+const crypto = require("crypto");
 const { randomUUID } = require("crypto");
 const { Server } = require("socket.io");
 
 const app = express();
 const server = http.createServer(app);
-const io = new Server(server, {
-  // Profile photos are limited to 1 MB in the browser; base64 adds some overhead.
-  maxHttpBufferSize: 1_500_000
-});
-
+const io = new Server(server, { maxHttpBufferSize: 1_500_000 });
 const PORT = Number(process.env.PORT) || 3000;
-const MAX_NAME_LENGTH = 24;
-const MAX_MESSAGE_LENGTH = 1_000;
-const HISTORY_FILE = path.join(__dirname, "chat-history.json");
-const USERS_FILE = path.join(__dirname, "known-users.json");
-const messages = loadHistory();
-const knownUsers = loadJson(USERS_FILE, {});
+const DATA_FILE = path.join(__dirname, "chat-data.json");
+const ADMIN_PINS = new Set(["8210", "82111"]);
+const clean = (value, length) => typeof value === "string" ? value.trim().replace(/\s+/g, " ").slice(0, length) : "";
+const validDevice = (value) => typeof value === "string" && /^[a-z0-9-]{16,80}$/i.test(value) ? value : "";
+const validPin = (value) => typeof value === "string" && /^[A-Za-z0-9]{4,6}$/.test(value);
+const validAvatar = (value) => typeof value === "string" && /^data:image\/(png|jpeg|gif|webp);base64,/i.test(value) && value.length <= 1_400_000 ? value : "";
+function load() { try { const data = JSON.parse(fs.readFileSync(DATA_FILE, "utf8")); if (data.version === 2) return data; } catch {} return { version: 2, accounts: {}, devices: {}, bans: { account: {}, device: {}, ip: {} }, messages: [] }; }
+const data = load();
+function save() { try { fs.writeFileSync(`${DATA_FILE}.tmp`, JSON.stringify(data)); fs.renameSync(`${DATA_FILE}.tmp`, DATA_FILE); } catch (error) { console.error("Could not save chat data:", error.message); } }
+function hashPin(pin) { const salt = crypto.randomBytes(16).toString("hex"); return `${salt}:${crypto.scryptSync(pin, salt, 32).toString("hex")}`; }
+function pinMatches(pin, saved) { if (!validPin(pin) || !saved) return false; const [salt, expected] = saved.split(":"); const actual = crypto.scryptSync(pin, salt, 32).toString("hex"); return actual.length === expected.length && crypto.timingSafeEqual(Buffer.from(actual), Buffer.from(expected)); }
+function profile(account) { return { id: account.id, name: account.name, nickname: account.nickname || "", bio: account.bio || "", avatar: account.avatar || "", admin: !!account.admin }; }
+const shownName = (account) => account.nickname || account.name;
+const findName = (name) => Object.values(data.accounts).find((item) => item.name.toLowerCase() === name.toLowerCase());
+function guestName() { let name; do name = `gues-${crypto.randomInt(100, 1000)}`; while (findName(name)); return name; }
+const ipOf = (socket) => {
+  // Only trust forwarded headers when the Node port is reachable exclusively through a trusted proxy.
+  const forwarded = process.env.TRUST_PROXY === "1" ? socket.handshake.headers["x-forwarded-for"]?.split(",")[0]?.trim() : "";
+  return String(forwarded || socket.handshake.address || "").replace(/^::ffff:/, "");
+};
+function pruneBans() { let dirty = false; for (const set of Object.values(data.bans)) for (const [key, ban] of Object.entries(set)) if (ban.until && ban.until <= Date.now()) { delete set[key]; dirty = true; } if (dirty) save(); }
+function getBan(kind, target) { const ban = data.bans[kind][target]; return ban && (!ban.until || ban.until > Date.now()) ? ban : null; }
+function currentBan(socket, device, account) { pruneBans(); return getBan("ip", ipOf(socket)) || (device && getBan("device", device)) || (account && getBan("account", account)); }
+function banError(ban) { return `You are banned${ban.until ? ` until ${new Date(ban.until).toLocaleString()}` : " permanently"}.`; }
+function socketsFor(accountId) { return [...io.sockets.sockets.values()].filter((socket) => socket.data.accountId === accountId); }
+function voiceAccounts() { return new Set([...(io.sockets.adapter.rooms.get("voice") || [])].map((id) => io.sockets.sockets.get(id)?.data.accountId).filter(Boolean)); }
+function presence() { const voice = voiceAccounts(); return Object.values(data.accounts).map((account) => { const sockets = socketsFor(account.id); return { ...profile(account), displayName: shownName(account), status: !sockets.length ? "offline" : sockets.some((socket) => socket.data.visibility === "online") ? "online" : "away", voice: voice.has(account.id) }; }).sort((a, b) => a.displayName.localeCompare(b.displayName)); }
+const broadcastPresence = () => io.emit("presence users", presence());
+function view(message) { if (message.type !== "chat") return message; const account = data.accounts[message.authorId]; return { ...message, name: account?.name || message.name, nickname: account?.nickname || "", avatar: account?.avatar || message.avatar || "" }; }
+function mustUser(socket, acknowledge) { const account = data.accounts[socket.data.accountId]; if (!account) { acknowledge?.({ ok: false, error: "Join the chat first." }); return null; } const ban = currentBan(socket, socket.data.deviceId, account.id); if (ban) { acknowledge?.({ ok: false, error: banError(ban) }); socket.disconnect(); return null; } return account; }
+function mustAdmin(socket, acknowledge) { const account = mustUser(socket, acknowledge); if (!account || !account.admin) { if (account) acknowledge?.({ ok: false, error: "Only admins can do that." }); return null; } return account; }
+function voiceParticipants() { return [...(io.sockets.adapter.rooms.get("voice") || [])].map((id) => { const socket = io.sockets.sockets.get(id); const account = socket && data.accounts[socket.data.accountId]; return account ? { id, name: shownName(account), avatar: account.avatar || "" } : null; }).filter(Boolean); }
 
 app.use(express.static(path.join(__dirname, "public")));
-
-function cleanText(value, maxLength) {
-  if (typeof value !== "string") return "";
-  return value.trim().replace(/\s+/g, " ").slice(0, maxLength);
-}
-
-function loadHistory() {
-  try {
-    const history = JSON.parse(fs.readFileSync(HISTORY_FILE, "utf8"));
-    return Array.isArray(history) ? history : [];
-  } catch (error) {
-    if (error.code !== "ENOENT") console.error("Could not read chat history:", error.message);
-    return [];
-  }
-}
-
-function loadJson(file, fallback) {
-  try { return JSON.parse(fs.readFileSync(file, "utf8")); }
-  catch (error) {
-    if (error.code !== "ENOENT") console.error(`Could not read ${file}:`, error.message);
-    return fallback;
-  }
-}
-
-function saveHistory() {
-  try {
-    const temporaryFile = `${HISTORY_FILE}.tmp`;
-    fs.writeFileSync(temporaryFile, JSON.stringify(messages), "utf8");
-    fs.renameSync(temporaryFile, HISTORY_FILE);
-  } catch (error) {
-    console.error("Could not save chat history:", error.message);
-  }
-}
-
-function saveUsers() {
-  try { fs.writeFileSync(USERS_FILE, JSON.stringify(knownUsers), "utf8"); }
-  catch (error) { console.error("Could not save known users:", error.message); }
-}
-
-function cleanClientId(value) {
-  return typeof value === "string" && /^[a-z0-9-]{16,80}$/i.test(value) ? value : "";
-}
-
-function cleanAvatar(value) {
-  return typeof value === "string" && /^data:image\/(png|jpeg|gif|webp);base64,/i.test(value) && value.length <= 1_400_000 ? value : "";
-}
-
-function socketsFor(clientId) {
-  return [...io.sockets.sockets.values()].filter((connectedSocket) => connectedSocket.data.clientId === clientId);
-}
-
-function voiceClientIds() {
-  return new Set([...(io.sockets.adapter.rooms.get("voice") || [])]
-    .map((socketId) => io.sockets.sockets.get(socketId)?.data.clientId)
-    .filter(Boolean));
-}
-
-function presenceUsers() {
-  const inVoice = voiceClientIds();
-  return Object.entries(knownUsers).map(([id, user]) => {
-    const sockets = socketsFor(id);
-    const status = sockets.length === 0 ? "offline" : sockets.some((item) => item.data.visibility === "online") ? "online" : "away";
-    return { id, name: user.name, status, voice: inVoice.has(id) };
-  }).sort((first, second) => first.name.localeCompare(second.name));
-}
-
-function broadcastPresence() {
-  io.emit("presence users", presenceUsers());
-}
-
-function bindIdentity(socket, requestedName, requestedClientId, requestedAvatar) {
-  const clientId = cleanClientId(requestedClientId);
-  const name = cleanText(requestedName, MAX_NAME_LENGTH);
-  if (!clientId || !name) return { error: "Choose a display name first." };
-  const duplicate = Object.entries(knownUsers).find(([id, user]) => id !== clientId && user.name.toLocaleLowerCase() === name.toLocaleLowerCase());
-  if (duplicate) return { error: "That display name is already in use." };
-
-  const oldName = knownUsers[clientId]?.name;
-  socket.data.clientId = clientId;
-  socket.data.name = name;
-  socket.data.visibility ||= "online";
-  socket.join(`identity:${clientId}`);
-  const avatar = cleanAvatar(requestedAvatar) || knownUsers[clientId]?.avatar || "";
-  knownUsers[clientId] = { name, avatar, lastSeen: Date.now() };
-  saveUsers();
-  io.to(`identity:${clientId}`).emit("identity name", name);
-  io.emit("user profile updated", { id: clientId, name, avatar });
-  return { clientId, name, oldName, avatar };
-}
-
-function addSystemMessage(text) {
-  const message = { type: "system", text, timestamp: Date.now() };
-  messages.push(message);
-  saveHistory();
-  io.emit("message", message);
-}
-
-function voiceParticipants() {
-  return [...(io.sockets.adapter.rooms.get("voice") || [])]
-    .map((socketId) => {
-      const participant = io.sockets.sockets.get(socketId);
-      return participant && {
-        id: socketId,
-        name: participant.data.name,
-        clientId: participant.data.clientId,
-        avatar: knownUsers[participant.data.clientId]?.avatar || ""
-      };
-    })
-    .filter(Boolean);
-}
-
 io.on("connection", (socket) => {
-  socket.emit("history", messages);
-  socket.emit("presence users", presenceUsers());
-
-  socket.on("set name", (value, acknowledge) => {
-    const requestedName = typeof value === "object" && value ? value.name : value;
-    const requestedClientId = typeof value === "object" && value ? value.clientId : "";
-    const announceJoin = Boolean(typeof value === "object" && value?.announceJoin);
-    const previousConnections = cleanClientId(requestedClientId) ? socketsFor(requestedClientId).filter((item) => item.id !== socket.id).length : 0;
-    const identity = bindIdentity(socket, requestedName, requestedClientId, value?.avatar);
-    if (identity.error) {
-      acknowledge?.({ ok: false, error: identity.error });
-      return;
-    }
-    acknowledge?.({ ok: true, name: identity.name });
-    broadcastPresence();
-    if (identity.oldName && identity.oldName !== identity.name) addSystemMessage(`${identity.oldName} is now ${identity.name}.`);
-    else if (announceJoin && previousConnections === 0) addSystemMessage(`${identity.name} joined the chat.`);
+  socket.emit("history", data.messages.map(view)); socket.emit("presence users", presence());
+  socket.on("join", (request, acknowledge) => {
+    const deviceId = validDevice(request?.deviceId); if (!deviceId) return acknowledge?.({ ok: false, error: "This browser could not create a device ID." });
+    const initialBan = currentBan(socket, deviceId); if (initialBan) return acknowledge?.({ ok: false, error: banError(initialBan) });
+    let account = data.accounts[data.devices[deviceId]];
+    if (!account && request?.mode === "sign-in") { account = findName(clean(request.name, 24)); if (!account || !pinMatches(request.pin, account.pinHash)) return acknowledge?.({ ok: false, error: "That name and PIN do not match." }); data.devices[deviceId] = account.id; }
+    if (!account && request?.mode !== "sign-in") { const name = clean(request.name, 24) || guestName(); if (findName(name)) return acknowledge?.({ ok: false, error: "That account name is taken. Join it using its PIN." }); if (request.pin && !validPin(request.pin)) return acknowledge?.({ ok: false, error: "A PIN must be 4–6 letters or numbers." }); account = { id: randomUUID(), name, nickname: "", bio: "", avatar: validAvatar(request.avatar), pinHash: request.pin ? hashPin(request.pin) : "", admin: ADMIN_PINS.has(request.pin), createdAt: Date.now() }; data.accounts[account.id] = account; data.devices[deviceId] = account.id; }
+    if (!account) return acknowledge?.({ ok: false, error: "This device has no available account." }); const ban = currentBan(socket, deviceId, account.id); if (ban) return acknowledge?.({ ok: false, error: banError(ban) });
+    socket.data.accountId = account.id; socket.data.deviceId = deviceId; socket.data.visibility = "online"; socket.join(`account:${account.id}`); save(); acknowledge?.({ ok: true, account: profile(account), displayName: shownName(account) }); socket.emit("history", data.messages.map(view)); broadcastPresence();
   });
-
-  socket.on("chat message", (value, acknowledge) => {
-    if (!socket.data.name) {
-      acknowledge?.({ ok: false, error: "Choose a display name first." });
-      return;
-    }
-
-    const text = cleanText(value, MAX_MESSAGE_LENGTH);
-    if (!text) return;
-
-    const message = {
-      type: "chat",
-      id: randomUUID(),
-      authorId: socket.data.clientId,
-      name: socket.data.name,
-      avatar: knownUsers[socket.data.clientId]?.avatar || "",
-      text,
-      timestamp: Date.now()
-    };
-    messages.push(message);
-    saveHistory();
-    io.emit("message", message);
-    acknowledge?.({ ok: true });
-  });
-
-  socket.on("edit message", ({ id, text }, acknowledge) => {
-    const message = messages.find((item) => item.id === id && item.authorId === socket.data.clientId);
-    const updatedText = cleanText(text, MAX_MESSAGE_LENGTH);
-    if (!message || !updatedText) return acknowledge?.({ ok: false, error: "Message could not be edited." });
-    message.text = updatedText;
-    message.editedAt = Date.now();
-    saveHistory();
-    io.emit("message updated", { id, text: updatedText, editedAt: message.editedAt });
-    acknowledge?.({ ok: true });
-  });
-
-  socket.on("delete message", ({ id }, acknowledge) => {
-    const index = messages.findIndex((item) => item.id === id && item.authorId === socket.data.clientId);
-    if (index === -1) return acknowledge?.({ ok: false, error: "Message could not be deleted." });
-    messages.splice(index, 1);
-    saveHistory();
-    io.emit("message deleted", id);
-    acknowledge?.({ ok: true });
-  });
-
-  socket.on("leave chat", () => {
-    if (socket.data.name && socketsFor(socket.data.clientId).filter((item) => item.id !== socket.id).length === 0) addSystemMessage(`${socket.data.name} left the chat.`);
-    socket.disconnect(true);
-  });
-
-  socket.on("presence state", (state) => {
-    if (!socket.data.clientId) return;
-    socket.data.visibility = state === "away" ? "away" : "online";
-    broadcastPresence();
-  });
-
-  socket.on("voice join", (value, acknowledge) => {
-    const identity = bindIdentity(socket, value?.name, value?.clientId);
-    if (identity.error) {
-      acknowledge?.({ ok: false, error: identity.error });
-      return;
-    }
-    if (voiceParticipants().some((participant) => participant.clientId === identity.clientId)) return acknowledge?.({ ok: false, error: "You are already in voice chat in another tab." });
-
-    const peers = voiceParticipants();
-    socket.join("voice");
-    socket.emit("voice participants", peers);
-    broadcastPresence();
-    acknowledge?.({ ok: true, name: identity.name });
-  });
-
-  socket.on("voice signal", ({ target, signal }) => {
-    if (!socket.rooms.has("voice") || typeof target !== "string" || !signal) return;
-    io.to(target).emit("voice signal", {
-      from: socket.id,
-      name: socket.data.name,
-      avatar: knownUsers[socket.data.clientId]?.avatar || "",
-      signal
-    });
-  });
-
-  socket.on("voice leave", () => {
-    if (!socket.rooms.has("voice")) return;
-    socket.to("voice").emit("voice participant left", socket.id);
-    socket.leave("voice");
-    broadcastPresence();
-  });
-
-  socket.on("disconnect", () => {
-    if (socket.rooms.has("voice")) socket.to("voice").emit("voice participant left", socket.id);
-    broadcastPresence();
-  });
+  socket.on("get profile", (id, acknowledge) => { const account = data.accounts[id]; const viewer = data.accounts[socket.data.accountId]; if (!account) return acknowledge?.({ ok: false, error: "Profile not found." }); const result = { ok: true, profile: profile(account) }; if (viewer?.admin) result.moderationTargets = { device: Object.entries(data.devices).filter(([, accountId]) => accountId === id).map(([deviceId]) => deviceId)[0] || "", ip: socketsFor(id).map(ipOf)[0] || "" }; acknowledge?.(result); });
+  socket.on("update profile", (request, acknowledge) => { const actor = mustUser(socket, acknowledge); if (!actor) return; const target = request?.accountId && actor.admin ? data.accounts[request.accountId] : actor; if (!target) return acknowledge?.({ ok: false, error: "Account not found." }); const own = actor.id === target.id;
+    if (Object.hasOwn(request || {}, "name")) { if (own && !actor.admin) return acknowledge?.({ ok: false, error: "Only an admin can change an account name." }); const name = clean(request.name, 24); const other = findName(name); if (!name || (other && other.id !== target.id)) return acknowledge?.({ ok: false, error: "That account name is not available." }); target.name = name; }
+    if (Object.hasOwn(request || {}, "nickname")) target.nickname = clean(request.nickname, 24); if (Object.hasOwn(request || {}, "bio")) target.bio = clean(request.bio, 280); if (Object.hasOwn(request || {}, "avatar")) target.avatar = validAvatar(request.avatar); if (request.pin) { if (!validPin(request.pin)) return acknowledge?.({ ok: false, error: "A PIN must be 4–6 letters or numbers." }); target.pinHash = hashPin(request.pin); target.admin = ADMIN_PINS.has(request.pin); } save(); io.emit("user profile updated", profile(target)); broadcastPresence(); acknowledge?.({ ok: true, profile: profile(target) }); });
+  socket.on("chat message", (text, acknowledge) => { const account = mustUser(socket, acknowledge); text = clean(text, 1000); if (!account || !text) return; const message = { type: "chat", id: randomUUID(), authorId: account.id, name: account.name, avatar: account.avatar || "", text, timestamp: Date.now() }; data.messages.push(message); save(); io.emit("message", view(message)); acknowledge?.({ ok: true }); });
+  socket.on("edit message", ({ id, text }, acknowledge) => { const actor = mustUser(socket, acknowledge); const message = actor && data.messages.find((item) => item.id === id && (item.authorId === actor.id || actor.admin)); text = clean(text, 1000); if (!message || !text) return acknowledge?.({ ok: false, error: "Message could not be edited." }); message.text = text; message.editedAt = Date.now(); save(); io.emit("message updated", { id, text, editedAt: message.editedAt }); acknowledge?.({ ok: true }); });
+  socket.on("delete message", ({ id }, acknowledge) => { const actor = mustUser(socket, acknowledge); const index = actor && data.messages.findIndex((item) => item.id === id && (item.authorId === actor.id || actor.admin)); if (index < 0) return acknowledge?.({ ok: false, error: "Message could not be deleted." }); data.messages.splice(index, 1); save(); io.emit("message deleted", id); acknowledge?.({ ok: true }); });
+  socket.on("ban", (request, acknowledge) => { const admin = mustAdmin(socket, acknowledge); const kind = request?.kind; const target = request?.target; const minutes = Number(request?.durationMinutes); if (!admin) return; if (!["account", "device", "ip"].includes(kind) || typeof target !== "string" || !target || !Number.isInteger(minutes) || minutes < 0 || minutes > 525600) return acknowledge?.({ ok: false, error: "Choose a valid ban target and duration." }); data.bans[kind][target] = { until: minutes ? Date.now() + minutes * 60000 : null, by: admin.id, createdAt: Date.now() }; save(); acknowledge?.({ ok: true }); for (const other of io.sockets.sockets.values()) if ((kind === "account" && other.data.accountId === target) || (kind === "device" && other.data.deviceId === target) || (kind === "ip" && ipOf(other) === target)) other.disconnect(true); });
+  socket.on("presence state", (state) => { if (socket.data.accountId) { socket.data.visibility = state === "away" ? "away" : "online"; broadcastPresence(); } }); socket.on("leave chat", () => socket.disconnect(true));
+  socket.on("voice join", (_, acknowledge) => { const account = mustUser(socket, acknowledge); if (!account) return; if (voiceAccounts().has(account.id)) return acknowledge?.({ ok: false, error: "You are already in voice chat in another tab." }); const peers = voiceParticipants(); socket.join("voice"); socket.emit("voice participants", peers); socket.to("voice").emit("voice participant joined", { id: socket.id, name: shownName(account), avatar: account.avatar || "" }); broadcastPresence(); acknowledge?.({ ok: true, name: shownName(account) }); });
+  socket.on("voice signal", ({ target, signal }) => { const account = data.accounts[socket.data.accountId]; if (socket.rooms.has("voice") && target && signal && account) io.to(target).emit("voice signal", { from: socket.id, name: shownName(account), avatar: account.avatar || "", signal }); }); socket.on("voice leave", () => { if (socket.rooms.has("voice")) { socket.to("voice").emit("voice participant left", socket.id); socket.leave("voice"); broadcastPresence(); } }); socket.on("disconnect", () => broadcastPresence());
 });
-
-server.listen(PORT, "0.0.0.0", () => {
-  console.log(`Chat is running at http://localhost:${PORT}`);
-});
+server.listen(PORT, "0.0.0.0", () => console.log(`Chat is running at http://localhost:${PORT}`));

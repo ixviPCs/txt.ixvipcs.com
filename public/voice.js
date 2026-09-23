@@ -1,5 +1,6 @@
 const socket = io();
 const name = localStorage.getItem("open-chat-display-name");
+const deviceId = localStorage.getItem("open-chat-device-id");
 const grid = document.querySelector("#voice-grid");
 const participantList = document.querySelector("#voice-list");
 const participantCount = document.querySelector("#voice-count");
@@ -15,7 +16,7 @@ let muted = false;
 let deafened = false;
 let audioContext;
 
-if (!name) window.location.replace("/");
+if (!name || !deviceId) window.location.replace("/");
 document.querySelector("#voice-identity").textContent = `Voice as ${name}`;
 
 function updatePeople() {
@@ -153,7 +154,7 @@ async function joinVoice() {
     addCard(socket.id, name, localStorage.getItem("open-chat-avatar") || "", true);
     monitorAudio(socket.id, stream);
     updatePeople();
-    socket.emit("voice join", { name, clientId: localStorage.getItem("open-chat-client-id") }, (result) => {
+    socket.emit("voice join", {}, (result) => {
       if (!result?.ok) status.textContent = result?.error || "Could not join voice.";
       else status.textContent = "You are connected.";
     });
@@ -162,4 +163,7 @@ async function joinVoice() {
   }
 }
 
-socket.on("connect", joinVoice);
+socket.on("connect", () => socket.emit("join", { mode: "create", deviceId }, (result) => {
+  if (!result?.ok) status.textContent = result?.error || "Could not verify your account.";
+  else joinVoice();
+}));

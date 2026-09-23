@@ -64,6 +64,17 @@ button:disabled { cursor: not-allowed; opacity: .55; }
 .message-action { padding: 0; border: 0; background: none; color: #91b8ff; font-size: .78rem; font-weight: 650; }
 .delete-action { color: #ffabb7; }
 .message-avatar { width: 22px; height: 22px; border-radius: 50%; object-fit: cover; }
+.profile-trigger, .profile-name, .online-profile { cursor: pointer; }
+.profile-name, .online-profile { padding: 0; background: none; color: inherit; font: inherit; font-weight: 750; text-align: left; white-space: normal; }
+.real-name { display: block; margin-left: -1px; color: #8d98ac; font-size: .7rem; font-weight: 500; line-height: 1; }
+.message-meta { flex-wrap: wrap; column-gap: 8px; }
+.message-meta .real-name { flex-basis: 100%; }
+.profile-dialog { width: min(calc(100vw - 32px), 460px); }
+.profile-dialog label { margin-top: 13px; }
+.profile-dialog textarea, .profile-dialog select { width: 100%; border: 1px solid #46546f; border-radius: 10px; padding: 10px 12px; background: #111722; color: inherit; font: inherit; }
+.profile-dialog textarea { min-height: 88px; resize: vertical; }
+.profile-dialog select { width: auto; }
+.dialog-avatar { display: block; width: 64px; height: 64px; margin: 12px 0 4px; border-radius: 50%; object-fit: cover; }
 .system-message { color: #8f9aad; font-size: .82rem; text-align: center; }
 .message-form { position: fixed; z-index: 2; bottom: 22px; left: 50%; width: min(calc(100vw - 32px), clamp(350px, 34vw, 620px)); transform: translateX(-50%); align-items: center; padding: 6px; border: 1px solid #46546f; border-radius: 999px; background: rgba(21, 27, 38, .96); box-shadow: 0 14px 36px rgba(0,0,0,.32); }
 .message-form input { border: 0; border-radius: 999px; background: transparent; padding: 11px 14px; }
