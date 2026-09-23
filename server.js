@@ -122,7 +122,12 @@ function voiceParticipants() {
   return [...(io.sockets.adapter.rooms.get("voice") || [])]
     .map((socketId) => {
       const participant = io.sockets.sockets.get(socketId);
-      return participant && { id: socketId, name: participant.data.name, clientId: participant.data.clientId };
+      return participant && {
+        id: socketId,
+        name: participant.data.name,
+        clientId: participant.data.clientId,
+        avatar: knownUsers[participant.data.clientId]?.avatar || ""
+      };
     })
     .filter(Boolean);
 }
@@ -219,7 +224,12 @@ io.on("connection", (socket) => {
 
   socket.on("voice signal", ({ target, signal }) => {
     if (!socket.rooms.has("voice") || typeof target !== "string" || !signal) return;
-    io.to(target).emit("voice signal", { from: socket.id, name: socket.data.name, signal });
+    io.to(target).emit("voice signal", {
+      from: socket.id,
+      name: socket.data.name,
+      avatar: knownUsers[socket.data.clientId]?.avatar || "",
+      signal
+    });
   });
 
   socket.on("voice leave", () => {

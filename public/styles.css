@@ -22,7 +22,7 @@ button:disabled { cursor: not-allowed; opacity: .55; }
 .chat-panel { min-height: 100vh; padding: 0; overflow: hidden; background: transparent; border: 0; border-radius: 0; box-shadow: none; }
 .chat-topbar { position: fixed; z-index: 2; inset: 0 0 auto; min-height: 64px; display: flex; align-items: center; justify-content: space-between; padding: 12px clamp(16px, 4vw, 48px); border-bottom: 1px solid #303b51; background: rgba(16, 19, 26, .88); backdrop-filter: blur(16px); color: #bfc9d9; font-size: .9rem; }
 .identity-block { display: flex; align-items: center; gap: 8px; }
-.topbar-avatar { width: 28px; height: 28px; border-radius: 50%; object-fit: cover; border: 1px solid #52627e; }
+.topbar-avatar { width: 28px; height: 28px; border-radius: 50%; object-fit: cover; }
 .text-button { padding: 4px; background: none; color: #91b8ff; }
 .voice-button { text-decoration: none; }
 .room-actions { display: flex; align-items: center; gap: 14px; }
@@ -63,6 +63,7 @@ button:disabled { cursor: not-allowed; opacity: .55; }
 .chat-message:hover .message-actions, .message-actions:focus-within { opacity: 1; pointer-events: auto; }
 .message-action { padding: 0; border: 0; background: none; color: #91b8ff; font-size: .78rem; font-weight: 650; }
 .delete-action { color: #ffabb7; }
+.message-avatar { width: 22px; height: 22px; border-radius: 50%; object-fit: cover; }
 .system-message { color: #8f9aad; font-size: .82rem; text-align: center; }
 .message-form { position: fixed; z-index: 2; bottom: 22px; left: 50%; width: min(calc(100vw - 32px), clamp(350px, 34vw, 620px)); transform: translateX(-50%); align-items: center; padding: 6px; border: 1px solid #46546f; border-radius: 999px; background: rgba(21, 27, 38, .96); box-shadow: 0 14px 36px rgba(0,0,0,.32); }
 .message-form input { border: 0; border-radius: 999px; background: transparent; padding: 11px 14px; }
@@ -78,7 +79,7 @@ button:disabled { cursor: not-allowed; opacity: .55; }
 .voice-grid { width: min(100%, 1200px); margin: 0 auto; display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 16px; }
 .voice-card { min-height: 180px; display: grid; place-content: center; justify-items: center; gap: 12px; border: 1px solid #303b51; border-radius: 18px; background: rgba(21, 27, 38, .82); color: #dce6f6; transition: border-color .15s, box-shadow .15s, transform .15s; }
 .voice-card.talking { border-color: #79e6b0; box-shadow: 0 0 0 2px #79e6b044, 0 0 28px #79e6b055; transform: translateY(-2px); }
-.voice-initials { display: grid; place-items: center; width: 64px; height: 64px; border-radius: 50%; background: #263c66; color: #cbdcff; font-weight: 800; font-size: 1.3rem; }
+.voice-initials { display: grid; place-items: center; width: 64px; height: 64px; border-radius: 50%; object-fit: cover; background: #263c66; color: #cbdcff; font-weight: 800; font-size: 1.3rem; }
 .voice-controls { position: fixed; z-index: 3; bottom: 22px; left: 50%; display: flex; gap: 9px; padding: 7px; transform: translateX(-50%); border: 1px solid #46546f; border-radius: 999px; background: rgba(21, 27, 38, .96); box-shadow: 0 14px 36px rgba(0,0,0,.32); }
 .voice-controls button { border-radius: 999px; }
 .active-control { background: #ca9c47; color: #1b1406; }

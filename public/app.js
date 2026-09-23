@@ -60,6 +60,14 @@ function renderMessage(message, grouped = false) {
     const time = document.createElement("time");
     time.textContent = timeLabel(message.timestamp) + (message.editedAt ? " · edited" : "");
     if (!grouped) {
+      const avatar = profiles.get(message.authorId)?.avatar || message.avatar;
+      if (avatar) {
+        const image = document.createElement("img");
+        image.className = "message-avatar";
+        image.src = avatar;
+        image.alt = "";
+        meta.append(image);
+      }
       meta.append(author);
       meta.append(time);
     }

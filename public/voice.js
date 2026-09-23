@@ -29,14 +29,17 @@ function updatePeople() {
   });
 }
 
-function addCard(id, displayName, isSelf = false) {
+function addCard(id, displayName, avatar = "", isSelf = false) {
   if (document.querySelector(`[data-participant="${CSS.escape(id)}"]`)) return;
   const card = document.createElement("article");
   card.className = "voice-card";
   card.dataset.participant = id;
-  const initials = document.createElement("span");
+  const initials = avatar ? document.createElement("img") : document.createElement("span");
   initials.className = "voice-initials";
-  initials.textContent = displayName.slice(0, 2).toUpperCase();
+  if (avatar) {
+    initials.src = avatar;
+    initials.alt = "";
+  } else initials.textContent = displayName.slice(0, 2).toUpperCase();
   const label = document.createElement("strong");
   label.textContent = isSelf ? `${displayName} (you)` : displayName;
   card.append(initials, label);
@@ -68,10 +71,10 @@ function monitorAudio(id, audioStream) {
   tick();
 }
 
-function makeConnection(peerId, peerName) {
+function makeConnection(peerId, peerName, peerAvatar = "") {
   if (connections.has(peerId)) return connections.get(peerId);
   participants.set(peerId, { id: peerId, name: peerName });
-  addCard(peerId, peerName);
+  addCard(peerId, peerName, peerAvatar);
   updatePeople();
   const connection = new RTCPeerConnection(rtcConfig);
   connections.set(peerId, connection);
@@ -94,7 +97,7 @@ function makeConnection(peerId, peerName) {
 }
 
 async function callPeer(peer) {
-  const connection = makeConnection(peer.id, peer.name);
+  const connection = makeConnection(peer.id, peer.name, peer.avatar);
   const offer = await connection.createOffer();
   await connection.setLocalDescription(offer);
   socket.emit("voice signal", { target: peer.id, signal: { description: connection.localDescription } });
@@ -103,8 +106,8 @@ async function callPeer(peer) {
 socket.on("voice participants", (peers) => peers.forEach(callPeer));
 socket.on("voice participant joined", callPeer);
 socket.on("voice participant left", removeParticipant);
-socket.on("voice signal", async ({ from, name: peerName, signal }) => {
-  const connection = makeConnection(from, peerName);
+socket.on("voice signal", async ({ from, name: peerName, avatar, signal }) => {
+  const connection = makeConnection(from, peerName, avatar);
   try {
     if (signal.description) {
       await connection.setRemoteDescription(signal.description);
@@ -147,7 +150,7 @@ async function joinVoice() {
   try {
     stream = await navigator.mediaDevices.getUserMedia({ audio: true, video: false });
     participants.set(socket.id, { id: socket.id, name });
-    addCard(socket.id, name, true);
+    addCard(socket.id, name, localStorage.getItem("open-chat-avatar") || "", true);
     monitorAudio(socket.id, stream);
     updatePeople();
     socket.emit("voice join", { name, clientId: localStorage.getItem("open-chat-client-id") }, (result) => {
