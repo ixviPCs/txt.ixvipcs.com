@@ -11,6 +11,8 @@ h2 { font-size: 1.25rem; }
 .name-panel, .chat-panel { background: rgba(21, 27, 38, .88); border: 1px solid #303b51; border-radius: 18px; box-shadow: 0 20px 80px rgba(0,0,0,.25); padding: 20px; }
 .name-panel { width: min(calc(100% - 28px), 760px); margin: min(25vh, 220px) auto 24px; }
 .name-panel form { margin-top: 18px; }
+.avatar-label { margin-top: 14px; }
+.avatar-label span { color: #8792a5; font-weight: 400; }
 label { display: block; font-size: .9rem; font-weight: 650; margin-bottom: 7px; }
 .input-row, .message-form { display: flex; gap: 9px; }
 input { min-width: 0; width: 100%; border: 1px solid #46546f; border-radius: 10px; padding: 12px 14px; background: #111722; color: inherit; font: inherit; }
@@ -49,15 +51,16 @@ button:disabled { cursor: not-allowed; opacity: .55; }
 .chat-message p { color: #d5dce7; line-height: 1.45; margin-top: 3px; overflow-wrap: anywhere; }
 .chat-message:has(.message-actions) p { padding-right: 86px; }
 .chat-message { position: relative; }
-.messages > li.grouped-message { margin-top: 0; }
+.messages > li.grouped-message { margin-top: -3px; }
 .grouped-time { position: absolute; left: -72px; top: 2px; color: #8792a5; font-size: .75rem; opacity: 0; transition: opacity .15s; }
 .grouped-message:hover .grouped-time { opacity: 1; }
-.message-actions { position: absolute; right: 0; top: 0; display: flex; gap: 8px; opacity: .35; transition: opacity .15s; }
+.message-actions { position: absolute; right: 0; top: 0; display: flex; gap: 8px; opacity: 0; pointer-events: none; transition: opacity .15s; }
 .message-meta { padding-right: 86px; }
 .grouped-message .message-meta { display: none; }
-.chat-message:hover .message-actions, .message-actions:focus-within { opacity: 1; }
+.chat-message:hover .message-actions, .message-actions:focus-within { opacity: 1; pointer-events: auto; }
 .message-action { padding: 0; border: 0; background: none; color: #91b8ff; font-size: .78rem; font-weight: 650; }
 .delete-action { color: #ffabb7; }
+.message-avatar { width: 20px; height: 20px; border-radius: 50%; object-fit: cover; border: 1px solid #52627e; }
 .system-message { color: #8f9aad; font-size: .82rem; text-align: center; }
 .message-form { position: fixed; z-index: 2; bottom: 22px; left: 50%; width: min(calc(100vw - 32px), clamp(350px, 34vw, 620px)); transform: translateX(-50%); align-items: center; padding: 6px; border: 1px solid #46546f; border-radius: 999px; background: rgba(21, 27, 38, .96); box-shadow: 0 14px 36px rgba(0,0,0,.32); }
 .message-form input { border: 0; border-radius: 999px; background: transparent; padding: 11px 14px; }

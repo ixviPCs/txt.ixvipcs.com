@@ -63,6 +63,10 @@ function cleanClientId(value) {
   return typeof value === "string" && /^[a-z0-9-]{16,80}$/i.test(value) ? value : "";
 }
 
+function cleanAvatar(value) {
+  return typeof value === "string" && /^data:image\/(png|jpeg|gif|webp);base64,/i.test(value) && value.length <= 1_400_000 ? value : "";
+}
+
 function socketsFor(clientId) {
   return [...io.sockets.sockets.values()].filter((connectedSocket) => connectedSocket.data.clientId === clientId);
 }
@@ -86,7 +90,7 @@ function broadcastPresence() {
   io.emit("presence users", presenceUsers());
 }
 
-function bindIdentity(socket, requestedName, requestedClientId) {
+function bindIdentity(socket, requestedName, requestedClientId, requestedAvatar) {
   const clientId = cleanClientId(requestedClientId);
   const name = cleanText(requestedName, MAX_NAME_LENGTH);
   if (!clientId || !name) return { error: "Choose a display name first." };
@@ -98,10 +102,12 @@ function bindIdentity(socket, requestedName, requestedClientId) {
   socket.data.name = name;
   socket.data.visibility ||= "online";
   socket.join(`identity:${clientId}`);
-  knownUsers[clientId] = { name, lastSeen: Date.now() };
+  const avatar = cleanAvatar(requestedAvatar) || knownUsers[clientId]?.avatar || "";
+  knownUsers[clientId] = { name, avatar, lastSeen: Date.now() };
   saveUsers();
   io.to(`identity:${clientId}`).emit("identity name", name);
-  return { clientId, name, oldName };
+  io.emit("user profile updated", { id: clientId, name, avatar });
+  return { clientId, name, oldName, avatar };
 }
 
 function addSystemMessage(text) {
@@ -129,7 +135,7 @@ io.on("connection", (socket) => {
     const requestedClientId = typeof value === "object" && value ? value.clientId : "";
     const announceJoin = Boolean(typeof value === "object" && value?.announceJoin);
     const previousConnections = cleanClientId(requestedClientId) ? socketsFor(requestedClientId).filter((item) => item.id !== socket.id).length : 0;
-    const identity = bindIdentity(socket, requestedName, requestedClientId);
+    const identity = bindIdentity(socket, requestedName, requestedClientId, value?.avatar);
     if (identity.error) {
       acknowledge?.({ ok: false, error: identity.error });
       return;
@@ -154,6 +160,7 @@ io.on("connection", (socket) => {
       id: randomUUID(),
       authorId: socket.data.clientId,
       name: socket.data.name,
+      avatar: knownUsers[socket.data.clientId]?.avatar || "",
       text,
       timestamp: Date.now()
     };

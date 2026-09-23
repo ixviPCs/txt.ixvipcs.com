@@ -4,6 +4,7 @@ const chatPanel = document.querySelector("#chat-panel");
 const nameForm = document.querySelector("#name-form");
 const messageForm = document.querySelector("#message-form");
 const nameInput = document.querySelector("#name");
+const avatarInput = document.querySelector("#avatar");
 const messageInput = document.querySelector("#message");
 const messages = document.querySelector("#messages");
 const identity = document.querySelector("#identity");
@@ -20,6 +21,8 @@ const clientIdKey = "open-chat-client-id";
 const leftChatKey = "open-chat-left";
 let intentionallyLeft = localStorage.getItem(leftChatKey) === "true";
 let chatHistory = [];
+const profiles = new Map();
+let avatarData = localStorage.getItem("open-chat-avatar") || "";
 let clientId = localStorage.getItem(clientIdKey);
 if (!clientId) {
   clientId = crypto.randomUUID();
@@ -55,7 +58,18 @@ function renderMessage(message, grouped = false) {
     author.textContent = message.name;
     const time = document.createElement("time");
     time.textContent = timeLabel(message.timestamp) + (message.editedAt ? " · edited" : "");
-    if (!grouped) meta.append(author, time);
+    if (!grouped) {
+      meta.append(author);
+      const avatar = profiles.get(message.authorId)?.avatar || message.avatar;
+      if (avatar) {
+        const image = document.createElement("img");
+        image.className = "message-avatar";
+        image.src = avatar;
+        image.alt = "";
+        meta.append(image);
+      }
+      meta.append(time);
+    }
     const text = document.createElement("p");
     text.textContent = message.text;
     if (grouped) {
@@ -117,7 +131,7 @@ function showNamePanel() {
 }
 
 function setName(name, focusMessage = false) {
-  socket.emit("set name", { name, clientId, announceJoin: intentionallyLeft }, (result) => {
+  socket.emit("set name", { name, clientId, avatar: avatarData, announceJoin: intentionallyLeft }, (result) => {
     if (!result?.ok) {
       nameError.textContent = result?.error || "Could not save your name.";
       return;
@@ -141,6 +155,9 @@ function submitName(name, focusMessage = false) {
 
 socket.on("history", (receivedHistory) => {
   chatHistory = receivedHistory;
+  receivedHistory.forEach((message) => {
+    if (message.authorId && message.avatar) profiles.set(message.authorId, { name: message.name, avatar: message.avatar });
+  });
   renderHistory();
 });
 socket.on("message", (message) => {
@@ -179,6 +196,10 @@ socket.on("identity name", (name) => {
   localStorage.setItem(savedNameKey, name);
   identity.textContent = `Chatting as ${name}`;
 });
+socket.on("user profile updated", (profile) => {
+  profiles.set(profile.id, profile);
+  renderHistory();
+});
 socket.on("connect", () => {
   chatError.textContent = "";
   const savedName = localStorage.getItem(savedNameKey);
@@ -206,6 +227,23 @@ nameForm.addEventListener("submit", (event) => {
   event.preventDefault();
   nameError.textContent = "";
   submitName(nameInput.value, true);
+});
+
+avatarInput.addEventListener("change", () => {
+  const file = avatarInput.files[0];
+  if (!file) return;
+  if (file.size > 1_000_000) {
+    nameError.textContent = "Choose an image smaller than 1 MB.";
+    avatarInput.value = "";
+    return;
+  }
+  const reader = new FileReader();
+  reader.addEventListener("load", () => {
+    avatarData = reader.result;
+    try { localStorage.setItem("open-chat-avatar", avatarData); }
+    catch { nameError.textContent = "That image is too large to save in this browser."; }
+  });
+  reader.readAsDataURL(file);
 });
 
 messageForm.addEventListener("submit", (event) => {
