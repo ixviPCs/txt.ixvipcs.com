@@ -8,6 +8,7 @@ const avatarInput = document.querySelector("#avatar");
 const messageInput = document.querySelector("#message");
 const messages = document.querySelector("#messages");
 const identity = document.querySelector("#identity");
+const profileAvatar = document.querySelector("#profile-avatar");
 const nameError = document.querySelector("#name-error");
 const chatError = document.querySelector("#chat-error");
 const changeName = document.querySelector("#change-name");
@@ -60,14 +61,6 @@ function renderMessage(message, grouped = false) {
     time.textContent = timeLabel(message.timestamp) + (message.editedAt ? " · edited" : "");
     if (!grouped) {
       meta.append(author);
-      const avatar = profiles.get(message.authorId)?.avatar || message.avatar;
-      if (avatar) {
-        const image = document.createElement("img");
-        image.className = "message-avatar";
-        image.src = avatar;
-        image.alt = "";
-        meta.append(image);
-      }
       meta.append(time);
     }
     const text = document.createElement("p");
@@ -116,6 +109,8 @@ function deleteMessage(id) {
 
 function enterChat(name) {
   identity.textContent = `Chatting as ${name}`;
+  profileAvatar.src = avatarData;
+  profileAvatar.hidden = !avatarData;
   namePanel.hidden = true;
   chatPanel.hidden = false;
   messageInput.disabled = false;
@@ -198,6 +193,11 @@ socket.on("identity name", (name) => {
 });
 socket.on("user profile updated", (profile) => {
   profiles.set(profile.id, profile);
+  if (profile.id === clientId) {
+    avatarData = profile.avatar;
+    profileAvatar.src = avatarData;
+    profileAvatar.hidden = !avatarData;
+  }
   renderHistory();
 });
 socket.on("connect", () => {
