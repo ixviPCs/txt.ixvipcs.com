@@ -105,7 +105,9 @@ async function callPeer(peer) {
 }
 
 socket.on("voice participants", (peers) => peers.forEach(callPeer));
-socket.on("voice participant joined", callPeer);
+// The joining participant initiates offers for existing peers. Existing peers only
+// create their connection here and wait for that offer, preventing offer glare.
+socket.on("voice participant joined", (peer) => makeConnection(peer.id, peer.name, peer.avatar));
 socket.on("voice participant left", removeParticipant);
 socket.on("voice signal", async ({ from, name: peerName, avatar, signal }) => {
   const connection = makeConnection(from, peerName, avatar);
