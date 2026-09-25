@@ -8,7 +8,7 @@ New accounts default to `gues-###`. Users can set a nickname and bio from **Prof
 
 ## Moderation notes
 
-IP bans are enforced during the Socket.IO handshake and again on every protected action. With the included Caddy setup, keep Node's port 3000 private (do not router-forward it) and leave `TRUST_PROXY=1` in `deploy/open-chat.service`; Caddy supplies the real visitor address. An admin can select **IP address** from a person's profile while that person is online. Device bans use a browser-stored random device ID, so clearing browser storage or changing browsers creates a new device ID; they are a deterrent, not hardware-level enforcement. Use an IP ban for an account that keeps returning with fresh browser data.
+IP bans are enforced during the Socket.IO handshake and again on every protected action. With the included Caddy setup, keep Node's port 3000 private (do not router-forward it) and leave `TRUST_PROXY=1` in `deploy/open-chat.service`; Caddy supplies the real visitor address. An admin can select **IP address** from a person's profile while that person is online. To prevent collateral bans, the server refuses local/proxy addresses and an IP already associated with another known account. Device bans use a browser-stored random device ID, so clearing browser storage or changing browsers creates a new device ID; they are a deterrent, not hardware-level enforcement.
 
 ## Reliable voice with Cloudflare Tunnel
 
