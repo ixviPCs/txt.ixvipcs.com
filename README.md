@@ -2,6 +2,8 @@
 
 A small real-time chat room with server-owned accounts, profiles, and moderation. The first account on a browser is permanently linked to that browser's device ID; signing in to an existing account from a new browser requires its PIN. Account data, bans, and chat history are stored together in `chat-data.json` on the server.
 
+A private `.pin-index-secret` file is created automatically beside the data file. Keep it on the Ubuntu server and out of Git; it lets later manual PIN sign-ins find the right account immediately without weakening the stored PIN hashes.
+
 New accounts default to `gues-###`. Users can set a nickname and bio from **Profile**; the permanent account name stays visible below a nickname in chat. A PIN must be 4–6 ASCII letters or digits. PINs `8210` and `82111` make the account an admin, with message moderation, profile editing, and account/device/IP bans.
 
 ## Moderation notes
