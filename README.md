@@ -1,10 +1,10 @@
 # Open Chat
 
-A small real-time chat room with server-owned accounts, profiles, and moderation. The first account on a browser is permanently linked to that browser's device ID; signing in to an existing account from a new browser requires its PIN. Account data, bans, and chat history are stored together in `chat-data.json` on the server.
+A small real-time chat room with server-owned accounts, profiles, moderation, and an admin-managed access-code whitelist. A person enters their assigned access code once; their profile is then remembered on that browser. Account data, codes, bans, and chat history are stored together in `chat-data.json` on the server.
 
-A private `.pin-index-secret` file is created automatically beside the data file. Keep it on the Ubuntu server and out of Git; it lets later manual PIN sign-ins find the right account immediately without weakening the stored PIN hashes.
+A private `.pin-index-secret` file is created automatically beside the data file. Keep it on the Ubuntu server and out of Git; it protects the lookup index for hashed legacy credentials and access codes.
 
-New accounts default to `gues-###`. Users can set a nickname and bio from **Profile**; the permanent account name stays visible below a nickname in chat. A PIN must be 4–6 ASCII letters or digits. PINs `8210` and `82111` make the account an admin, with message moderation, profile editing, and account/device/IP bans.
+New profiles default to `gues-###`. Users can set their own nickname, bio, and profile image from **Profile**; the permanent account name stays visible below a nickname in chat. Set private admin PINs through `ADMIN_PINS` on the server, then use `/admin.html` to create regular or admin access codes. No admin PIN is embedded in the source.
 
 ## Moderation notes
 
@@ -59,3 +59,15 @@ For updates, run `git pull`, `npm ci --omit=dev`, and `pm2 restart open-chat` fr
 ## Important
 
 This is intentionally an open, anonymous chat. Before sharing it broadly, add rate limiting, moderation tools, and persistent storage if needed.
+# Open Chat
+
+## Access-code setup
+
+Set `ADMIN_PINS` on the server before using `admin.html`; it is a comma-separated list of private admin PINs and must never be put in browser code or committed to Git. For example on Ubuntu:
+
+```bash
+export ADMIN_PINS='your-private-admin-pin'
+npm start
+```
+
+Visit `/admin.html`, enter that private admin PIN, and create one access code per person. The home page accepts only those server-stored codes. A generated code is displayed only once; send it privately to its owner. Existing accounts retain their old PIN as a legacy access code so they can still enter after this update.
