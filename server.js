@@ -105,6 +105,8 @@ function voiceIceServers(account) {
 
 app.use(express.static(path.join(__dirname, "public")));
 app.use("/uploads", express.static(UPLOAD_DIR));
+app.use("/vendor/emoji-picker", express.static(path.join(__dirname, "node_modules", "emoji-picker-element")));
+app.use("/vendor/emoji-picker-data", express.static(path.join(__dirname, "node_modules", "emoji-picker-element-data")));
 app.use(express.json({ limit: "16kb" }));
 function isAdminPin(pin) { return typeof pin === "string" && ADMIN_PINS.has(pin); }
 function adminCodes() { return Object.entries(data.accessCodes).map(([id, item]) => ({ id, createdAt: item.createdAt, admin: !!item.admin, used: !!item.accountId, accountId: item.accountId || "" })).sort((a, b) => b.createdAt - a.createdAt); }
