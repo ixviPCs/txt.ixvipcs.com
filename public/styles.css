@@ -111,9 +111,11 @@ button:disabled { cursor: not-allowed; opacity: .55; }
 .inline-editor { width: 100%; min-height: 42px; resize: vertical; border: 1px solid #79a5ff; border-radius: 8px; padding: 8px 10px; background: #111722; color: inherit; font: inherit; line-height: 1.45; }
 .inline-edit-controls { display: flex; justify-content: flex-end; gap: 6px; margin-top: 5px; }
 .inline-edit-controls button { padding: 5px 9px; font-size: .75rem; }
-.reaction-picker { position: fixed; z-index: 7; display: grid; grid-template-columns: repeat(4, 1fr); gap: 3px; padding: 6px; border: 1px solid #46546f; border-radius: 11px; background: #151b26; box-shadow: 0 10px 28px #0008; }
-.reaction-picker button { padding: 6px; border-radius: 7px; background: transparent; color: inherit; font-size: 1.2rem; line-height: 1; }
-.reaction-picker button:hover, .reaction-picker button:focus-visible { background: #283b62; }
+.reaction-picker { position: fixed; z-index: 7; width: min(330px, calc(100vw - 16px)); padding: 8px; border: 1px solid #46546f; border-radius: 12px; background: #151b26; box-shadow: 0 10px 28px #0008; }
+.reaction-picker input { width: 100%; padding: 8px 10px; border-radius: 8px; }
+.emoji-grid { display: grid; grid-template-columns: repeat(8, 1fr); gap: 2px; max-height: 228px; margin-top: 7px; overflow-y: auto; }
+.emoji-grid button { padding: 5px; border-radius: 7px; background: transparent; color: inherit; font-size: 1.22rem; line-height: 1; }
+.emoji-grid button:hover, .emoji-grid button:focus-visible { background: #283b62; }
 .error { color: #ffabb7; font-size: .85rem; min-height: 1.25em; margin-top: 8px; }
 .chat-panel .error { position: fixed; z-index: 3; bottom: 78px; left: 50%; width: min(calc(100vw - 32px), 620px); transform: translateX(-50%); margin: 0; text-align: center; }
 .sr-only { position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px; overflow: hidden; clip: rect(0, 0, 0, 0); white-space: nowrap; border: 0; }
