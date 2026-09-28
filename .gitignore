@@ -4,6 +4,7 @@ chat-history.json.tmp
 known-users.json
 chat-data.json
 chat-data.json.tmp
+uploads/
 .pin-index-secret
 .env
 npm-debug.log*
