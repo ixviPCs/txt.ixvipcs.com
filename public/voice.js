@@ -7,11 +7,16 @@ const participantCount = document.querySelector("#voice-count");
 const status = document.querySelector("#voice-status");
 const muteButton = document.querySelector("#mute");
 const deafenButton = document.querySelector("#deafen");
+const cameraButton = document.querySelector("#camera");
+const flipCameraButton = document.querySelector("#flip-camera");
+const shareScreenButton = document.querySelector("#share-screen");
 const leaveButton = document.querySelector("#leave-voice");
 const participants = new Map();
 const connections = new Map();
 let rtcConfig = { iceServers: [{ urls: "stun:stun.l.google.com:19302" }] };
 let stream;
+let cameraStream;
+let screenStream;
 let muted = false;
 let deafened = false;
 let audioContext;
@@ -31,20 +36,47 @@ function updatePeople() {
 }
 
 function addCard(id, displayName, avatar = "", isSelf = false) {
-  if (document.querySelector(`[data-participant="${CSS.escape(id)}"]`)) return;
-  const card = document.createElement("article");
+  let card = document.querySelector(`[data-participant="${CSS.escape(id)}"]`);
+  if (card) return card;
+  card = document.createElement("article");
   card.className = "voice-card";
   card.dataset.participant = id;
   const initials = avatar ? document.createElement("img") : document.createElement("span");
   initials.className = "voice-initials";
-  if (avatar) {
-    initials.src = avatar;
-    initials.alt = "";
-  } else initials.textContent = displayName.slice(0, 2).toUpperCase();
+  if (avatar) { initials.src = avatar; initials.alt = ""; } else initials.textContent = displayName.slice(0, 2).toUpperCase();
   const label = document.createElement("strong");
   label.textContent = isSelf ? `${displayName} (you)` : displayName;
   card.append(initials, label);
   grid.append(card);
+  return card;
+}
+
+function addVideo(id, track, isSelf, label) {
+  const card = document.querySelector(`[data-participant="${CSS.escape(id)}"]`);
+  if (!card || card.querySelector(`[data-video-track="${CSS.escape(track.id)}"]`)) return;
+  let stage = card.querySelector(".voice-video-stage");
+  if (!stage) { stage = document.createElement("div"); stage.className = "voice-video-stage"; card.prepend(stage); }
+  const video = document.createElement("video");
+  video.className = "voice-video" + (isSelf && label === "Camera" ? " self-camera" : "");
+  video.dataset.videoTrack = track.id;
+  video.autoplay = true;
+  video.playsInline = true;
+  video.muted = isSelf;
+  video.srcObject = new MediaStream([track]);
+  const badge = document.createElement("span");
+  badge.className = "voice-video-label";
+  badge.textContent = label;
+  badge.dataset.videoTrack = track.id;
+  stage.append(video, badge);
+  track.addEventListener("ended", () => removeVideo(id, track.id), { once: true });
+}
+
+function removeVideo(id, trackId) {
+  const card = document.querySelector(`[data-participant="${CSS.escape(id)}"]`);
+  if (!card) return;
+  card.querySelector(`[data-video-track="${CSS.escape(trackId)}"]`)?.remove();
+  card.querySelectorAll(`.voice-video-label[data-video-track="${CSS.escape(trackId)}"]`).forEach((badge) => badge.remove());
+  if (!card.querySelector(".voice-video")) card.querySelector(".voice-video-stage")?.remove();
 }
 
 function removeParticipant(id) {
@@ -56,6 +88,7 @@ function removeParticipant(id) {
 }
 
 function monitorAudio(id, audioStream) {
+  if (!audioStream.getAudioTracks().length) return;
   audioContext ||= new AudioContext();
   const analyser = audioContext.createAnalyser();
   analyser.fftSize = 256;
@@ -65,11 +98,29 @@ function monitorAudio(id, audioStream) {
     const card = document.querySelector(`[data-participant="${CSS.escape(id)}"]`);
     if (!card) return;
     analyser.getByteFrequencyData(samples);
-    const level = samples.reduce((sum, sample) => sum + sample, 0) / samples.length;
-    card.classList.toggle("talking", level > 10);
+    card.classList.toggle("talking", samples.reduce((sum, sample) => sum + sample, 0) / samples.length > 10);
     requestAnimationFrame(tick);
   };
   tick();
+}
+
+async function negotiate(peerId, connection) {
+  if (connection.negotiating || connection.signalingState !== "stable") { connection.needsNegotiation = true; return; }
+  connection.negotiating = true;
+  try {
+    connection.makingOffer = true;
+    await connection.setLocalDescription(await connection.createOffer());
+    socket.emit("voice signal", { target: peerId, signal: { description: connection.localDescription } });
+  } catch (error) { console.error("Voice renegotiation error:", error); }
+  finally { connection.makingOffer = false; connection.negotiating = false; }
+}
+
+function renegotiateConnections() { connections.forEach((connection, peerId) => negotiate(peerId, connection)); }
+function addTrackToConnections(track, source) { connections.forEach((connection) => connection.addTrack(track, source)); }
+function removeTracksFromConnections(oldStream) {
+  if (!oldStream) return;
+  const oldTracks = new Set(oldStream.getTracks());
+  connections.forEach((connection) => connection.getSenders().forEach((sender) => { if (oldTracks.has(sender.track)) connection.removeTrack(sender); }));
 }
 
 function makeConnection(peerId, peerName, peerAvatar = "") {
@@ -78,48 +129,46 @@ function makeConnection(peerId, peerName, peerAvatar = "") {
   addCard(peerId, peerName, peerAvatar);
   updatePeople();
   const connection = new RTCPeerConnection(rtcConfig);
+  connection.polite = socket.id > peerId;
   connections.set(peerId, connection);
-  stream.getTracks().forEach((track) => connection.addTrack(track, stream));
-  connection.onicecandidate = ({ candidate }) => {
-    if (candidate) socket.emit("voice signal", { target: peerId, signal: { candidate } });
+  [stream, cameraStream, screenStream].filter(Boolean).forEach((source) => source.getTracks().forEach((track) => connection.addTrack(track, source)));
+  connection.onicecandidate = ({ candidate }) => { if (candidate) socket.emit("voice signal", { target: peerId, signal: { candidate } }); };
+  connection.ontrack = ({ track, streams }) => {
+    const remoteStream = streams[0] || new MediaStream([track]);
+    if (track.kind === "audio") {
+      const audio = new Audio();
+      audio.autoplay = true;
+      audio.srcObject = remoteStream;
+      audio.muted = deafened;
+      connection.remoteAudio = audio;
+      monitorAudio(peerId, remoteStream);
+    } else addVideo(peerId, track, false, "Video");
   };
-  connection.ontrack = ({ streams }) => {
-    const audio = new Audio();
-    audio.autoplay = true;
-    audio.srcObject = streams[0];
-    audio.muted = deafened;
-    connection.remoteAudio = audio;
-    monitorAudio(peerId, streams[0]);
+  connection.onsignalingstatechange = () => {
+    if (connection.signalingState === "stable" && connection.needsNegotiation) { connection.needsNegotiation = false; negotiate(peerId, connection); }
   };
-  connection.onconnectionstatechange = () => {
-    if (["failed", "closed"].includes(connection.connectionState)) removeParticipant(peerId);
-  };
+  connection.onconnectionstatechange = () => { if (["failed", "closed"].includes(connection.connectionState)) removeParticipant(peerId); };
   return connection;
 }
 
-async function callPeer(peer) {
-  const connection = makeConnection(peer.id, peer.name, peer.avatar);
-  const offer = await connection.createOffer();
-  await connection.setLocalDescription(offer);
-  socket.emit("voice signal", { target: peer.id, signal: { description: connection.localDescription } });
-}
-
+async function callPeer(peer) { const connection = makeConnection(peer.id, peer.name, peer.avatar); await negotiate(peer.id, connection); }
 socket.on("voice participants", (peers) => peers.forEach(callPeer));
-// The joining participant initiates offers for existing peers. Existing peers only
-// create their connection here and wait for that offer, preventing offer glare.
 socket.on("voice participant joined", (peer) => makeConnection(peer.id, peer.name, peer.avatar));
 socket.on("voice participant left", removeParticipant);
 socket.on("voice signal", async ({ from, name: peerName, avatar, signal }) => {
   const connection = makeConnection(from, peerName, avatar);
   try {
     if (signal.description) {
+      const collision = signal.description.type === "offer" && (connection.makingOffer || connection.signalingState !== "stable");
+      connection.ignoreOffer = !connection.polite && collision;
+      if (connection.ignoreOffer) return;
+      if (collision) await connection.setLocalDescription({ type: "rollback" });
       await connection.setRemoteDescription(signal.description);
       if (signal.description.type === "offer") {
-        const answer = await connection.createAnswer();
-        await connection.setLocalDescription(answer);
+        await connection.setLocalDescription(await connection.createAnswer());
         socket.emit("voice signal", { target: from, signal: { description: connection.localDescription } });
       }
-    } else if (signal.candidate) await connection.addIceCandidate(signal.candidate);
+    } else if (signal.candidate && !connection.ignoreOffer) await connection.addIceCandidate(signal.candidate);
   } catch (error) { console.error("Voice connection error:", error); }
 });
 
@@ -129,7 +178,6 @@ muteButton.addEventListener("click", () => {
   muteButton.textContent = muted ? "Unmute" : "Mute";
   muteButton.classList.toggle("active-control", muted);
 });
-
 deafenButton.addEventListener("click", () => {
   deafened = !deafened;
   connections.forEach((connection) => { if (connection.remoteAudio) connection.remoteAudio.muted = deafened; });
@@ -138,14 +186,78 @@ deafenButton.addEventListener("click", () => {
   deafenButton.classList.toggle("active-control", deafened);
 });
 
+async function refreshCameraOptions() {
+  const cameras = (await navigator.mediaDevices.enumerateDevices()).filter((device) => device.kind === "videoinput");
+  flipCameraButton.hidden = cameras.length < 2;
+}
+function stopCamera() {
+  if (!cameraStream) return;
+  const oldStream = cameraStream;
+  cameraStream = undefined;
+  removeTracksFromConnections(oldStream);
+  oldStream.getVideoTracks().forEach((track) => { removeVideo(socket.id, track.id); track.stop(); });
+  cameraButton.textContent = "Camera";
+  cameraButton.classList.remove("active-control");
+  flipCameraButton.hidden = true;
+  renegotiateConnections();
+}
+async function startCamera(preferredDeviceId) {
+  try {
+    const video = preferredDeviceId ? { deviceId: { exact: preferredDeviceId }, width: { ideal: 1920 }, height: { ideal: 1080 } } : { facingMode: { ideal: "user" }, width: { ideal: 1920 }, height: { ideal: 1080 } };
+    const nextStream = await navigator.mediaDevices.getUserMedia({ audio: false, video });
+    const oldStream = cameraStream;
+    cameraStream = nextStream;
+    if (oldStream) removeTracksFromConnections(oldStream);
+    oldStream?.getTracks().forEach((track) => { removeVideo(socket.id, track.id); track.stop(); });
+    nextStream.getVideoTracks().forEach((track) => { addVideo(socket.id, track, true, "Camera"); addTrackToConnections(track, nextStream); });
+    cameraButton.textContent = "Camera off";
+    cameraButton.classList.add("active-control");
+    await refreshCameraOptions();
+    status.textContent = "Camera is on.";
+    renegotiateConnections();
+  } catch (error) { status.textContent = "Camera access was not allowed or is unavailable."; }
+}
+cameraButton.addEventListener("click", () => cameraStream ? stopCamera() : startCamera());
+flipCameraButton.addEventListener("click", async () => {
+  const cameras = (await navigator.mediaDevices.enumerateDevices()).filter((device) => device.kind === "videoinput");
+  const currentId = cameraStream?.getVideoTracks()[0]?.getSettings().deviceId;
+  const index = cameras.findIndex((device) => device.deviceId === currentId);
+  if (cameras.length > 1) startCamera(cameras[(index + 1) % cameras.length].deviceId);
+});
+
+function stopScreenShare() {
+  if (!screenStream) return;
+  const oldStream = screenStream;
+  screenStream = undefined;
+  removeTracksFromConnections(oldStream);
+  oldStream.getVideoTracks().forEach((track) => { removeVideo(socket.id, track.id); track.stop(); });
+  shareScreenButton.textContent = "Share screen";
+  shareScreenButton.classList.remove("active-control");
+  status.textContent = "Screen sharing stopped.";
+  renegotiateConnections();
+}
+async function startScreenShare() {
+  try {
+    screenStream = await navigator.mediaDevices.getDisplayMedia({ video: { width: { ideal: 1920 }, height: { ideal: 1080 }, frameRate: { ideal: 30, max: 30 } }, audio: false });
+    const track = screenStream.getVideoTracks()[0];
+    track.addEventListener("ended", stopScreenShare, { once: true });
+    addVideo(socket.id, track, true, "Screen");
+    addTrackToConnections(track, screenStream);
+    shareScreenButton.textContent = "Stop sharing";
+    shareScreenButton.classList.add("active-control");
+    status.textContent = "You are sharing your screen.";
+    renegotiateConnections();
+  } catch (error) { status.textContent = "Screen sharing was cancelled or is unavailable."; }
+}
+shareScreenButton.addEventListener("click", () => screenStream ? stopScreenShare() : startScreenShare());
+
 function leaveVoice() {
   socket.emit("voice leave");
-  stream?.getTracks().forEach((track) => track.stop());
+  [stream, cameraStream, screenStream].filter(Boolean).forEach((source) => source.getTracks().forEach((track) => track.stop()));
   connections.forEach((connection) => connection.close());
   window.close();
   setTimeout(() => window.location.assign("/"), 150);
 }
-
 leaveButton.addEventListener("click", leaveVoice);
 window.addEventListener("pagehide", () => socket.emit("voice leave"));
 
@@ -156,19 +268,10 @@ async function joinVoice() {
     addCard(socket.id, name, localStorage.getItem("open-chat-avatar") || "", true);
     monitorAudio(socket.id, stream);
     updatePeople();
-    socket.emit("voice join", {}, (result) => {
-      if (!result?.ok) status.textContent = result?.error || "Could not join voice.";
-      else status.textContent = "You are connected.";
-    });
-  } catch (error) {
-    status.textContent = "Microphone access is needed to join voice chat. Allow it in your browser, then reload this page.";
-  }
+    socket.emit("voice join", {}, (result) => { status.textContent = result?.ok ? "You are connected. Turn on camera or share a screen when ready." : result?.error || "Could not join voice."; });
+  } catch (error) { status.textContent = "Microphone access is needed to join voice chat. Allow it in your browser, then reload this page."; }
 }
-
 socket.on("connect", () => socket.emit("join", { mode: "create", deviceId }, (result) => {
   if (!result?.ok) return status.textContent = result?.error || "Could not verify your account.";
-  socket.emit("voice config", (config) => {
-    if (config?.ok) rtcConfig = { iceServers: config.iceServers };
-    joinVoice();
-  });
+  socket.emit("voice config", (config) => { if (config?.ok) rtcConfig = { iceServers: config.iceServers }; joinVoice(); });
 }));

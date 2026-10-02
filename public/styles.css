@@ -122,9 +122,14 @@ button:disabled { cursor: not-allowed; opacity: .55; }
 .voice-shell { min-height: 100vh; padding: 96px clamp(18px, 4vw, 48px) 126px; }
 .voice-status { color: #aeb8c8; text-align: center; margin-bottom: 22px; }
 .voice-grid { width: min(100%, 1200px); margin: 0 auto; display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 16px; }
-.voice-card { min-height: 180px; display: grid; place-content: center; justify-items: center; gap: 12px; border: 1px solid #303b51; border-radius: 18px; background: rgba(21, 27, 38, .82); color: #dce6f6; transition: border-color .15s, box-shadow .15s, transform .15s; }
+.voice-card { position: relative; min-height: 180px; display: grid; place-content: center; justify-items: center; gap: 12px; overflow: hidden; border: 1px solid #303b51; border-radius: 18px; background: rgba(21, 27, 38, .82); color: #dce6f6; transition: border-color .15s, box-shadow .15s, transform .15s; }
 .voice-card.talking { border-color: #79e6b0; box-shadow: 0 0 0 2px #79e6b044, 0 0 28px #79e6b055; transform: translateY(-2px); }
 .voice-initials { display: grid; place-items: center; width: 64px; height: 64px; border-radius: 50%; object-fit: cover; background: #263c66; color: #cbdcff; font-weight: 800; font-size: 1.3rem; }
+.voice-card > strong { position: relative; z-index: 1; padding: 4px 9px; border-radius: 999px; background: rgba(12, 16, 24, .72); }
+.voice-video-stage { position: absolute; inset: 0; display: grid; grid-template-columns: repeat(auto-fit, minmax(0, 1fr)); background: #090d14; }
+.voice-video { width: 100%; height: 100%; min-height: 180px; object-fit: contain; background: #090d14; }
+.voice-video.self-camera { transform: scaleX(-1); }
+.voice-video-label { position: absolute; z-index: 1; top: 9px; left: 9px; padding: 3px 7px; border-radius: 999px; background: rgba(12, 16, 24, .72); color: #dce6f6; font-size: .75rem; }
 .voice-controls { position: fixed; z-index: 3; bottom: 22px; left: 50%; display: flex; gap: 9px; padding: 7px; transform: translateX(-50%); border: 1px solid #46546f; border-radius: 999px; background: rgba(21, 27, 38, .96); box-shadow: 0 14px 36px rgba(0,0,0,.32); }
 .voice-controls button { border-radius: 999px; }
 .active-control { background: #ca9c47; color: #1b1406; }
