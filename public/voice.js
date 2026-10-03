@@ -55,8 +55,8 @@ function addVideo(id, track, isSelf, label, mediaStreamId = "") {
   const card = document.querySelector(`[data-participant="${CSS.escape(id)}"]`);
   if (!card) return;
   const kind = label.toLowerCase();
-  if (isSelf) clearVideoKind(id, kind);
-  else if (kind === "camera" || kind === "screen") clearVideoKind(id, kind);
+  if (kind === "camera") clearCameraVideos(id);
+  else if (isSelf || kind === "screen") clearVideoKind(id, kind);
   if (card.querySelector(`[data-video-track="${CSS.escape(track.id)}"]`)) return;
   let stage = card.querySelector(".voice-video-stage");
   if (!stage) { stage = document.createElement("div"); stage.className = "voice-video-stage"; card.prepend(stage); }
@@ -83,6 +83,17 @@ function clearVideoKind(id, kind) {
   const card = document.querySelector(`[data-participant="${CSS.escape(id)}"]`);
   if (!card) return;
   card.querySelectorAll(`.voice-video[data-video-kind="${CSS.escape(kind)}"], .voice-video-label[data-video-kind="${CSS.escape(kind)}"]`).forEach((element) => element.remove());
+  if (!card.querySelector(".voice-video")) card.querySelector(".voice-video-stage")?.remove();
+}
+
+function clearCameraVideos(id, keepTrackId = "") {
+  const card = document.querySelector(`[data-participant="${CSS.escape(id)}"]`);
+  if (!card) return;
+  const tracks = new Set([...card.querySelectorAll('.voice-video[data-video-kind="camera"], .voice-video[data-video-kind="video"]')]
+    .map((video) => video.dataset.videoTrack)
+    .filter((trackId) => trackId && trackId !== keepTrackId));
+  tracks.forEach((trackId) => removeVideo(id, trackId));
+  if (!keepTrackId) card.querySelectorAll('.voice-video-label[data-video-kind="camera"], .voice-video-label[data-video-kind="video"]').forEach((badge) => badge.remove());
   if (!card.querySelector(".voice-video")) card.querySelector(".voice-video-stage")?.remove();
 }
 
@@ -182,7 +193,12 @@ function makeConnection(peerId, peerName, peerAvatar = "") {
       const mediaKinds = Object.entries(connection.remoteMediaKinds || {});
       const matchingKind = mediaKinds.find(([, state]) => state.enabled && state.streamId === remoteStream.id)?.[0];
       const activeKinds = mediaKinds.filter(([, state]) => state.enabled);
-      const kind = connection.remoteStreamKinds?.[remoteStream.id] || matchingKind || (activeKinds.length === 1 ? activeKinds[0][0] : "video");
+      let kind = connection.remoteStreamKinds?.[remoteStream.id] || matchingKind;
+      if (!kind && connection.remoteMediaKinds) {
+        if (activeKinds.length !== 1 || (activeKinds[0][1].streamId && activeKinds[0][1].streamId !== remoteStream.id)) return;
+        kind = activeKinds[0][0];
+      }
+      kind ||= "video";
       addVideo(peerId, track, false, kind === "camera" ? "Camera" : kind === "screen" ? "Screen" : "Video", remoteStream.id);
     }
   };
@@ -213,6 +229,7 @@ socket.on("voice signal", async ({ from, name: peerName, avatar, signal }) => {
         }
         const card = document.querySelector(`[data-participant="${CSS.escape(from)}"]`);
         const video = card?.querySelector(signal.media.streamId ? `.voice-video[data-video-stream="${CSS.escape(signal.media.streamId)}"]` : ".voice-video[data-video-kind='video']") || card?.querySelector(".voice-video[data-video-kind='video']");
+        if (signal.media.kind === "camera") clearCameraVideos(from, video?.dataset.videoTrack || "");
         const badge = video && card?.querySelector(`.voice-video-label[data-video-track="${CSS.escape(video.dataset.videoTrack)}"]`);
         if (video) { video.dataset.videoKind = signal.media.kind; if (signal.media.streamId) video.dataset.videoStream = signal.media.streamId; }
         if (badge) { badge.dataset.videoKind = signal.media.kind; if (signal.media.streamId) badge.dataset.videoStream = signal.media.streamId; badge.textContent = signal.media.kind === "camera" ? "Camera" : "Screen"; }
@@ -225,7 +242,8 @@ socket.on("voice signal", async ({ from, name: peerName, avatar, signal }) => {
           const card = document.querySelector(`[data-participant="${CSS.escape(from)}"]`);
           card?.querySelectorAll(`[data-video-stream="${CSS.escape(signal.media.streamId)}"]`).forEach((element) => element.remove());
         }
-        clearVideoKind(from, signal.media.kind);
+        if (signal.media.kind === "camera") clearCameraVideos(from);
+        else clearVideoKind(from, signal.media.kind);
       }
       return;
     }
@@ -268,7 +286,7 @@ function stopCamera() {
   const oldTrackId = oldStream.getVideoTracks()[0]?.id;
   signalMediaState("camera", false, oldTrackId, oldStream.id);
   removeTracksFromConnections(oldStream);
-  clearVideoKind(socket.id, "camera");
+  clearCameraVideos(socket.id);
   oldStream.getVideoTracks().forEach((track) => track.stop());
   cameraButton.textContent = "Camera";
   cameraButton.classList.remove("active-control");
@@ -282,7 +300,7 @@ async function startCamera(preferredDeviceId) {
     const oldStream = cameraStream;
     cameraStream = nextStream;
     if (oldStream) removeTracksFromConnections(oldStream);
-    clearVideoKind(socket.id, "camera");
+    clearCameraVideos(socket.id);
     oldStream?.getTracks().forEach((track) => track.stop());
     nextStream.getVideoTracks().forEach((track) => { addVideo(socket.id, track, true, "Camera", nextStream.id); addTrackToConnections(track, nextStream); signalMediaState("camera", true, track.id, nextStream.id); });
     cameraButton.textContent = "Camera off";
