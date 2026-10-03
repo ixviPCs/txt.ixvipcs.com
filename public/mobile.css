@@ -8,16 +8,17 @@
 .mobile-page .room-actions { gap: 4px; }
 .mobile-page .text-button { min-height: 38px; padding: 8px 6px; font-size: .75rem; }
 .mobile-page .online-users summary { min-height: 38px; display: grid; place-items: center; }
-.mobile-page .online-users ul { right: -4px; top: 40px; width: min(260px, calc(100vw - 20px)); }
-.mobile-page .messages { inset: calc(58px + env(safe-area-inset-top)) 0 calc(90px + env(safe-area-inset-bottom)); padding: 18px 14px; }
+.mobile-page .online-users ul { position: fixed; top: calc(58px + env(safe-area-inset-top)); right: 12px; left: 12px; width: auto; max-height: min(300px, calc(100dvh - 150px)); }
+.mobile-page .messages { inset: calc(58px + env(safe-area-inset-top)) 0 calc(90px + env(safe-area-inset-bottom)); padding: 18px 10px; }
 .mobile-page .messages > li + li { margin-top: 18px; }
 .mobile-page .message-meta { gap: 9px; }
 .mobile-page .message-avatar { width: 28px; height: 28px; }
-.mobile-page .message-body { gap: 6px; margin-left: 37px; }
+.mobile-page .message-body { gap: 6px; margin-left: 0; }
 .mobile-page .grouped-time { display: none; }
-.mobile-page .message-actions { opacity: 1; pointer-events: auto; gap: 10px; }
-.mobile-page .message-action { min-width: 32px; min-height: 32px; padding: 5px 4px; font-size: .78rem; }
-.mobile-page .reactions { margin-left: 37px; }
+.mobile-page .mobile-message-actions { position: fixed; z-index: 9; bottom: calc(78px + env(safe-area-inset-bottom)); left: 12px; right: 12px; display: grid; grid-template-columns: repeat(auto-fit, minmax(92px, 1fr)); gap: 8px; padding: 9px; border: 1px solid #536784; border-radius: 16px; background: #1b2433; box-shadow: 0 16px 48px #000b; }
+.mobile-page .mobile-message-actions .message-action { min-height: 44px; padding: 10px; border-radius: 10px; background: #2a3952; color: #e7effd; font-size: .86rem; }
+.mobile-page .mobile-message-actions .delete-action { background: #7e3440; color: #fff; }
+.mobile-page .reactions { margin-left: 0; }
 .mobile-page .reaction { min-height: 34px; padding: 5px 8px; }
 .mobile-page .attachment img { max-height: 240px; }
 .mobile-page .message-form { bottom: calc(9px + env(safe-area-inset-bottom)); width: calc(100% - 16px); padding: 6px; gap: 5px; border-radius: 18px; }
