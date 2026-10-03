@@ -54,7 +54,7 @@ function addCard(id, displayName, avatar = "", isSelf = false) {
 function addVideo(id, track, isSelf, label) {
   const card = document.querySelector(`[data-participant="${CSS.escape(id)}"]`);
   if (!card) return;
-  const kind = isSelf ? label.toLowerCase() : "remote";
+  const kind = label.toLowerCase();
   if (isSelf) clearVideoKind(id, kind);
   if (card.querySelector(`[data-video-track="${CSS.escape(track.id)}"]`)) return;
   let stage = card.querySelector(".voice-video-stage");
@@ -104,6 +104,10 @@ function resetVoiceCards() {
   connections.clear();
   participants.clear();
   grid.replaceChildren();
+}
+
+function signalMediaState(kind, enabled, trackId) {
+  connections.forEach((connection, peerId) => socket.emit("voice signal", { target: peerId, signal: { media: { kind, enabled, trackId } } }));
 }
 
 function monitorAudio(id, audioStream) {
@@ -161,7 +165,10 @@ function makeConnection(peerId, peerName, peerAvatar = "") {
       audio.muted = deafened;
       connection.remoteAudio = audio;
       monitorAudio(peerId, remoteStream);
-    } else addVideo(peerId, track, false, "Video");
+    } else {
+      const kind = connection.remoteTrackKinds?.[track.id];
+      addVideo(peerId, track, false, kind === "camera" ? "Camera" : kind === "screen" ? "Screen" : "Video");
+    }
   };
   connection.onsignalingstatechange = () => {
     if (connection.signalingState === "stable" && connection.needsNegotiation) { connection.needsNegotiation = false; negotiate(peerId, connection); }
@@ -177,6 +184,21 @@ socket.on("voice participant left", removeParticipant);
 socket.on("voice signal", async ({ from, name: peerName, avatar, signal }) => {
   const connection = makeConnection(from, peerName, avatar);
   try {
+    if (signal.media) {
+      connection.remoteTrackKinds ||= {};
+      if (signal.media.enabled) {
+        connection.remoteTrackKinds[signal.media.trackId] = signal.media.kind;
+        const card = document.querySelector(`[data-participant="${CSS.escape(from)}"]`);
+        const video = card?.querySelector(`[data-video-track="${CSS.escape(signal.media.trackId)}"]`);
+        const badge = card?.querySelector(`.voice-video-label[data-video-track="${CSS.escape(signal.media.trackId)}"]`);
+        if (video) video.dataset.videoKind = signal.media.kind;
+        if (badge) { badge.dataset.videoKind = signal.media.kind; badge.textContent = signal.media.kind === "camera" ? "Camera" : "Screen"; }
+      } else {
+        delete connection.remoteTrackKinds[signal.media.trackId];
+        clearVideoKind(from, signal.media.kind);
+      }
+      return;
+    }
     if (signal.description) {
       const collision = signal.description.type === "offer" && (connection.makingOffer || connection.signalingState !== "stable");
       connection.ignoreOffer = !connection.polite && collision;
@@ -213,6 +235,8 @@ function stopCamera() {
   if (!cameraStream) return;
   const oldStream = cameraStream;
   cameraStream = undefined;
+  const oldTrackId = oldStream.getVideoTracks()[0]?.id;
+  signalMediaState("camera", false, oldTrackId);
   removeTracksFromConnections(oldStream);
   clearVideoKind(socket.id, "camera");
   oldStream.getVideoTracks().forEach((track) => track.stop());
@@ -230,7 +254,7 @@ async function startCamera(preferredDeviceId) {
     if (oldStream) removeTracksFromConnections(oldStream);
     clearVideoKind(socket.id, "camera");
     oldStream?.getTracks().forEach((track) => track.stop());
-    nextStream.getVideoTracks().forEach((track) => { addVideo(socket.id, track, true, "Camera"); addTrackToConnections(track, nextStream); });
+    nextStream.getVideoTracks().forEach((track) => { addVideo(socket.id, track, true, "Camera"); addTrackToConnections(track, nextStream); signalMediaState("camera", true, track.id); });
     cameraButton.textContent = "Camera off";
     cameraButton.classList.add("active-control");
     await refreshCameraOptions();
@@ -250,6 +274,8 @@ function stopScreenShare() {
   if (!screenStream) return;
   const oldStream = screenStream;
   screenStream = undefined;
+  const oldTrackId = oldStream.getVideoTracks()[0]?.id;
+  signalMediaState("screen", false, oldTrackId);
   removeTracksFromConnections(oldStream);
   clearVideoKind(socket.id, "screen");
   oldStream.getVideoTracks().forEach((track) => track.stop());
@@ -265,6 +291,7 @@ async function startScreenShare() {
     track.addEventListener("ended", stopScreenShare, { once: true });
     addVideo(socket.id, track, true, "Screen");
     addTrackToConnections(track, screenStream);
+    signalMediaState("screen", true, track.id);
     shareScreenButton.textContent = "Stop sharing";
     shareScreenButton.classList.add("active-control");
     status.textContent = "You are sharing your screen.";
