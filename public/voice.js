@@ -53,12 +53,16 @@ function addCard(id, displayName, avatar = "", isSelf = false) {
 
 function addVideo(id, track, isSelf, label) {
   const card = document.querySelector(`[data-participant="${CSS.escape(id)}"]`);
-  if (!card || card.querySelector(`[data-video-track="${CSS.escape(track.id)}"]`)) return;
+  if (!card) return;
+  const kind = isSelf ? label.toLowerCase() : "remote";
+  if (isSelf) clearVideoKind(id, kind);
+  if (card.querySelector(`[data-video-track="${CSS.escape(track.id)}"]`)) return;
   let stage = card.querySelector(".voice-video-stage");
   if (!stage) { stage = document.createElement("div"); stage.className = "voice-video-stage"; card.prepend(stage); }
   const video = document.createElement("video");
   video.className = "voice-video" + (isSelf && label === "Camera" ? " self-camera" : "");
   video.dataset.videoTrack = track.id;
+  video.dataset.videoKind = kind;
   video.autoplay = true;
   video.playsInline = true;
   video.muted = isSelf;
@@ -67,8 +71,16 @@ function addVideo(id, track, isSelf, label) {
   badge.className = "voice-video-label";
   badge.textContent = label;
   badge.dataset.videoTrack = track.id;
+  badge.dataset.videoKind = kind;
   stage.append(video, badge);
   track.addEventListener("ended", () => removeVideo(id, track.id), { once: true });
+}
+
+function clearVideoKind(id, kind) {
+  const card = document.querySelector(`[data-participant="${CSS.escape(id)}"]`);
+  if (!card) return;
+  card.querySelectorAll(`.voice-video[data-video-kind="${CSS.escape(kind)}"], .voice-video-label[data-video-kind="${CSS.escape(kind)}"]`).forEach((element) => element.remove());
+  if (!card.querySelector(".voice-video")) card.querySelector(".voice-video-stage")?.remove();
 }
 
 function removeVideo(id, trackId) {
@@ -85,6 +97,13 @@ function removeParticipant(id) {
   participants.delete(id);
   document.querySelector(`[data-participant="${CSS.escape(id)}"]`)?.remove();
   updatePeople();
+}
+
+function resetVoiceCards() {
+  connections.forEach((connection) => connection.close());
+  connections.clear();
+  participants.clear();
+  grid.replaceChildren();
 }
 
 function monitorAudio(id, audioStream) {
@@ -195,7 +214,8 @@ function stopCamera() {
   const oldStream = cameraStream;
   cameraStream = undefined;
   removeTracksFromConnections(oldStream);
-  oldStream.getVideoTracks().forEach((track) => { removeVideo(socket.id, track.id); track.stop(); });
+  clearVideoKind(socket.id, "camera");
+  oldStream.getVideoTracks().forEach((track) => track.stop());
   cameraButton.textContent = "Camera";
   cameraButton.classList.remove("active-control");
   flipCameraButton.hidden = true;
@@ -208,7 +228,8 @@ async function startCamera(preferredDeviceId) {
     const oldStream = cameraStream;
     cameraStream = nextStream;
     if (oldStream) removeTracksFromConnections(oldStream);
-    oldStream?.getTracks().forEach((track) => { removeVideo(socket.id, track.id); track.stop(); });
+    clearVideoKind(socket.id, "camera");
+    oldStream?.getTracks().forEach((track) => track.stop());
     nextStream.getVideoTracks().forEach((track) => { addVideo(socket.id, track, true, "Camera"); addTrackToConnections(track, nextStream); });
     cameraButton.textContent = "Camera off";
     cameraButton.classList.add("active-control");
@@ -230,7 +251,8 @@ function stopScreenShare() {
   const oldStream = screenStream;
   screenStream = undefined;
   removeTracksFromConnections(oldStream);
-  oldStream.getVideoTracks().forEach((track) => { removeVideo(socket.id, track.id); track.stop(); });
+  clearVideoKind(socket.id, "screen");
+  oldStream.getVideoTracks().forEach((track) => track.stop());
   shareScreenButton.textContent = "Share screen";
   shareScreenButton.classList.remove("active-control");
   status.textContent = "Screen sharing stopped.";
@@ -263,6 +285,16 @@ window.addEventListener("pagehide", () => socket.emit("voice leave"));
 
 async function joinVoice() {
   try {
+    if (stream) {
+      [stream, cameraStream, screenStream].filter(Boolean).forEach((source) => source.getTracks().forEach((track) => track.stop()));
+      stream = undefined;
+      cameraStream = undefined;
+      screenStream = undefined;
+      resetVoiceCards();
+      cameraButton.textContent = "Camera";
+      shareScreenButton.textContent = "Share screen";
+      flipCameraButton.hidden = true;
+    }
     stream = await navigator.mediaDevices.getUserMedia({ audio: true, video: false });
     participants.set(socket.id, { id: socket.id, name });
     addCard(socket.id, name, localStorage.getItem("open-chat-avatar") || "", true);

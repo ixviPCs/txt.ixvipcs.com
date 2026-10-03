@@ -116,10 +116,15 @@ button:disabled { cursor: not-allowed; opacity: .55; }
 .reaction-picker { position: fixed; z-index: 7; max-width: calc(100vw - 16px); max-height: calc(100dvh - 16px); overflow: hidden; border: 1px solid #46546f; border-radius: 12px; background: #151b26; box-shadow: 0 10px 28px #0008; }
 .reaction-picker emoji-picker { --background: #151b26; --border-color: #46546f; --input-border-color: #46546f; --input-font-color: #eff3f8; --input-placeholder-color: #9ba8bd; --category-font-color: #bfc9d9; --category-icon-color: #aeb8c8; --category-icon-active-color: #91b8ff; --indicator-color: #79a5ff; --outline-color: #79a5ff; --button-hover-background: #283b62; --num-columns: 8; width: min(350px, calc(100vw - 18px)); height: min(410px, calc(100dvh - 18px)); }
 .error { color: #ffabb7; font-size: .85rem; min-height: 1.25em; margin-top: 8px; }
+.account-loading { display: flex; align-items: center; justify-content: center; gap: 9px; margin-top: 16px; padding: 11px 12px; border: 1px solid #46546f; border-radius: 10px; background: #182337; color: #cbd8ec; font-size: .88rem; }
+.loading-spinner { width: 16px; height: 16px; border: 2px solid #60708d; border-top-color: #91b8ff; border-radius: 50%; animation: account-spin .8s linear infinite; }
+@keyframes account-spin { to { transform: rotate(360deg); } }
+.chat-message[data-message-id^="pending-"] { opacity: .58; }
+.chat-message[data-message-id^="pending-"] .message-actions { display: none; }
 .chat-panel .error { position: fixed; z-index: 3; bottom: 78px; left: 50%; width: min(calc(100vw - 32px), 620px); transform: translateX(-50%); margin: 0; text-align: center; }
 .sr-only { position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px; overflow: hidden; clip: rect(0, 0, 0, 0); white-space: nowrap; border: 0; }
-.voice-page { min-height: 100vh; }
-.voice-shell { min-height: 100vh; padding: 96px clamp(18px, 4vw, 48px) 126px; }
+.voice-page { min-height: 100dvh; background: radial-gradient(circle at 20% 0%, #263657, transparent 42%), #10131a; }
+.voice-shell { min-height: 100dvh; padding: 96px clamp(18px, 4vw, 48px) 126px; background: transparent; }
 .voice-status { color: #aeb8c8; text-align: center; margin-bottom: 22px; }
 .voice-grid { width: min(100%, 1200px); margin: 0 auto; display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 16px; }
 .voice-card { position: relative; min-height: 180px; display: grid; place-content: center; justify-items: center; gap: 12px; overflow: hidden; border: 1px solid #303b51; border-radius: 18px; background: rgba(21, 27, 38, .82); color: #dce6f6; transition: border-color .15s, box-shadow .15s, transform .15s; }
