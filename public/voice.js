@@ -51,11 +51,12 @@ function addCard(id, displayName, avatar = "", isSelf = false) {
   return card;
 }
 
-function addVideo(id, track, isSelf, label) {
+function addVideo(id, track, isSelf, label, mediaStreamId = "") {
   const card = document.querySelector(`[data-participant="${CSS.escape(id)}"]`);
   if (!card) return;
   const kind = label.toLowerCase();
   if (isSelf) clearVideoKind(id, kind);
+  else if (kind === "camera" || kind === "screen") clearVideoKind(id, kind);
   if (card.querySelector(`[data-video-track="${CSS.escape(track.id)}"]`)) return;
   let stage = card.querySelector(".voice-video-stage");
   if (!stage) { stage = document.createElement("div"); stage.className = "voice-video-stage"; card.prepend(stage); }
@@ -63,6 +64,7 @@ function addVideo(id, track, isSelf, label) {
   video.className = "voice-video" + (isSelf && label === "Camera" ? " self-camera" : "");
   video.dataset.videoTrack = track.id;
   video.dataset.videoKind = kind;
+  if (mediaStreamId) video.dataset.videoStream = mediaStreamId;
   video.autoplay = true;
   video.playsInline = true;
   video.muted = isSelf;
@@ -72,6 +74,7 @@ function addVideo(id, track, isSelf, label) {
   badge.textContent = label;
   badge.dataset.videoTrack = track.id;
   badge.dataset.videoKind = kind;
+  if (mediaStreamId) badge.dataset.videoStream = mediaStreamId;
   stage.append(video, badge);
   track.addEventListener("ended", () => removeVideo(id, track.id), { once: true });
 }
@@ -106,8 +109,17 @@ function resetVoiceCards() {
   grid.replaceChildren();
 }
 
-function signalMediaState(kind, enabled, trackId) {
-  connections.forEach((connection, peerId) => socket.emit("voice signal", { target: peerId, signal: { media: { kind, enabled, trackId } } }));
+function signalMediaState(kind, enabled, trackId, streamId, targetId) {
+  const peers = targetId ? [[targetId, connections.get(targetId)]] : [...connections.entries()];
+  peers.forEach(([peerId, connection]) => {
+    if (connection) socket.emit("voice signal", { target: peerId, signal: { media: { kind, enabled, trackId, streamId } } });
+  });
+}
+
+function sendCurrentMediaState(peerId) {
+  [["camera", cameraStream], ["screen", screenStream]].forEach(([kind, source]) => {
+    if (source) signalMediaState(kind, true, source.getVideoTracks()[0]?.id, source.id, peerId);
+  });
 }
 
 function monitorAudio(id, audioStream) {
@@ -166,14 +178,19 @@ function makeConnection(peerId, peerName, peerAvatar = "") {
       connection.remoteAudio = audio;
       monitorAudio(peerId, remoteStream);
     } else {
-      const kind = connection.remoteTrackKinds?.[track.id];
-      addVideo(peerId, track, false, kind === "camera" ? "Camera" : kind === "screen" ? "Screen" : "Video");
+      if (connection.remoteRetiredStreams?.has(remoteStream.id)) return;
+      const mediaKinds = Object.entries(connection.remoteMediaKinds || {});
+      const matchingKind = mediaKinds.find(([, state]) => state.enabled && state.streamId === remoteStream.id)?.[0];
+      const activeKinds = mediaKinds.filter(([, state]) => state.enabled);
+      const kind = connection.remoteStreamKinds?.[remoteStream.id] || matchingKind || (activeKinds.length === 1 ? activeKinds[0][0] : "video");
+      addVideo(peerId, track, false, kind === "camera" ? "Camera" : kind === "screen" ? "Screen" : "Video", remoteStream.id);
     }
   };
   connection.onsignalingstatechange = () => {
     if (connection.signalingState === "stable" && connection.needsNegotiation) { connection.needsNegotiation = false; negotiate(peerId, connection); }
   };
   connection.onconnectionstatechange = () => { if (["failed", "closed"].includes(connection.connectionState)) removeParticipant(peerId); };
+  sendCurrentMediaState(peerId);
   return connection;
 }
 
@@ -185,16 +202,29 @@ socket.on("voice signal", async ({ from, name: peerName, avatar, signal }) => {
   const connection = makeConnection(from, peerName, avatar);
   try {
     if (signal.media) {
-      connection.remoteTrackKinds ||= {};
+      connection.remoteStreamKinds ||= {};
+      connection.remoteMediaKinds ||= {};
+      connection.remoteRetiredStreams ||= new Set();
+      connection.remoteMediaKinds[signal.media.kind] = { enabled: signal.media.enabled, streamId: signal.media.streamId };
       if (signal.media.enabled) {
-        connection.remoteTrackKinds[signal.media.trackId] = signal.media.kind;
+        if (signal.media.streamId) {
+          connection.remoteStreamKinds[signal.media.streamId] = signal.media.kind;
+          connection.remoteRetiredStreams.delete(signal.media.streamId);
+        }
         const card = document.querySelector(`[data-participant="${CSS.escape(from)}"]`);
-        const video = card?.querySelector(`[data-video-track="${CSS.escape(signal.media.trackId)}"]`);
-        const badge = card?.querySelector(`.voice-video-label[data-video-track="${CSS.escape(signal.media.trackId)}"]`);
-        if (video) video.dataset.videoKind = signal.media.kind;
-        if (badge) { badge.dataset.videoKind = signal.media.kind; badge.textContent = signal.media.kind === "camera" ? "Camera" : "Screen"; }
+        const video = card?.querySelector(signal.media.streamId ? `.voice-video[data-video-stream="${CSS.escape(signal.media.streamId)}"]` : ".voice-video[data-video-kind='video']") || card?.querySelector(".voice-video[data-video-kind='video']");
+        const badge = video && card?.querySelector(`.voice-video-label[data-video-track="${CSS.escape(video.dataset.videoTrack)}"]`);
+        if (video) { video.dataset.videoKind = signal.media.kind; if (signal.media.streamId) video.dataset.videoStream = signal.media.streamId; }
+        if (badge) { badge.dataset.videoKind = signal.media.kind; if (signal.media.streamId) badge.dataset.videoStream = signal.media.streamId; badge.textContent = signal.media.kind === "camera" ? "Camera" : "Screen"; }
       } else {
-        delete connection.remoteTrackKinds[signal.media.trackId];
+        if (signal.media.streamId) {
+          delete connection.remoteStreamKinds[signal.media.streamId];
+          connection.remoteRetiredStreams.add(signal.media.streamId);
+        }
+        if (signal.media.streamId) {
+          const card = document.querySelector(`[data-participant="${CSS.escape(from)}"]`);
+          card?.querySelectorAll(`[data-video-stream="${CSS.escape(signal.media.streamId)}"]`).forEach((element) => element.remove());
+        }
         clearVideoKind(from, signal.media.kind);
       }
       return;
@@ -236,7 +266,7 @@ function stopCamera() {
   const oldStream = cameraStream;
   cameraStream = undefined;
   const oldTrackId = oldStream.getVideoTracks()[0]?.id;
-  signalMediaState("camera", false, oldTrackId);
+  signalMediaState("camera", false, oldTrackId, oldStream.id);
   removeTracksFromConnections(oldStream);
   clearVideoKind(socket.id, "camera");
   oldStream.getVideoTracks().forEach((track) => track.stop());
@@ -254,7 +284,7 @@ async function startCamera(preferredDeviceId) {
     if (oldStream) removeTracksFromConnections(oldStream);
     clearVideoKind(socket.id, "camera");
     oldStream?.getTracks().forEach((track) => track.stop());
-    nextStream.getVideoTracks().forEach((track) => { addVideo(socket.id, track, true, "Camera"); addTrackToConnections(track, nextStream); signalMediaState("camera", true, track.id); });
+    nextStream.getVideoTracks().forEach((track) => { addVideo(socket.id, track, true, "Camera", nextStream.id); addTrackToConnections(track, nextStream); signalMediaState("camera", true, track.id, nextStream.id); });
     cameraButton.textContent = "Camera off";
     cameraButton.classList.add("active-control");
     await refreshCameraOptions();
@@ -275,7 +305,7 @@ function stopScreenShare() {
   const oldStream = screenStream;
   screenStream = undefined;
   const oldTrackId = oldStream.getVideoTracks()[0]?.id;
-  signalMediaState("screen", false, oldTrackId);
+  signalMediaState("screen", false, oldTrackId, oldStream.id);
   removeTracksFromConnections(oldStream);
   clearVideoKind(socket.id, "screen");
   oldStream.getVideoTracks().forEach((track) => track.stop());
@@ -289,9 +319,9 @@ async function startScreenShare() {
     screenStream = await navigator.mediaDevices.getDisplayMedia({ video: { width: { ideal: 1920 }, height: { ideal: 1080 }, frameRate: { ideal: 30, max: 30 } }, audio: false });
     const track = screenStream.getVideoTracks()[0];
     track.addEventListener("ended", stopScreenShare, { once: true });
-    addVideo(socket.id, track, true, "Screen");
+    addVideo(socket.id, track, true, "Screen", screenStream.id);
     addTrackToConnections(track, screenStream);
-    signalMediaState("screen", true, track.id);
+    signalMediaState("screen", true, track.id, screenStream.id);
     shareScreenButton.textContent = "Stop sharing";
     shareScreenButton.classList.add("active-control");
     status.textContent = "You are sharing your screen.";
