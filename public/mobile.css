@@ -1,0 +1,36 @@
+/* Phone-first layout. The chat behavior stays in app.js, so mobile and desktop share accounts and messages. */
+.mobile-page { min-height: 100dvh; overscroll-behavior: none; }
+.mobile-page .name-panel { width: calc(100% - 28px); margin: max(14dvh, 72px) auto 24px; padding: 24px 20px; }
+.mobile-page .chat-topbar { min-height: calc(58px + env(safe-area-inset-top)); padding: calc(8px + env(safe-area-inset-top)) 12px 8px; gap: 8px; font-size: .78rem; }
+.mobile-page .identity-block { min-width: 0; flex: 1; }
+.mobile-page #identity { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.mobile-page .topbar-avatar { width: 32px; height: 32px; flex: 0 0 32px; }
+.mobile-page .room-actions { gap: 4px; }
+.mobile-page .text-button { min-height: 38px; padding: 8px 6px; font-size: .75rem; }
+.mobile-page .online-users summary { min-height: 38px; display: grid; place-items: center; }
+.mobile-page .online-users ul { right: -4px; top: 40px; width: min(260px, calc(100vw - 20px)); }
+.mobile-page .messages { inset: calc(58px + env(safe-area-inset-top)) 0 calc(90px + env(safe-area-inset-bottom)); padding: 18px 14px; }
+.mobile-page .messages > li + li { margin-top: 18px; }
+.mobile-page .message-meta { gap: 9px; }
+.mobile-page .message-avatar { width: 28px; height: 28px; }
+.mobile-page .message-body { gap: 6px; margin-left: 37px; }
+.mobile-page .grouped-time { display: none; }
+.mobile-page .message-actions { opacity: 1; pointer-events: auto; gap: 10px; }
+.mobile-page .message-action { min-width: 32px; min-height: 32px; padding: 5px 4px; font-size: .78rem; }
+.mobile-page .reactions { margin-left: 37px; }
+.mobile-page .reaction { min-height: 34px; padding: 5px 8px; }
+.mobile-page .attachment img { max-height: 240px; }
+.mobile-page .message-form { bottom: calc(9px + env(safe-area-inset-bottom)); width: calc(100% - 16px); padding: 6px; gap: 5px; border-radius: 18px; }
+.mobile-page .message-form input { min-height: 42px; padding: 10px 7px; font-size: 16px; }
+.mobile-page .message-form button { min-height: 42px; padding: 10px 12px; }
+.mobile-page .composer-icon { width: 42px; height: 42px; flex: 0 0 42px; }
+.mobile-page .chat-panel .error { bottom: calc(74px + env(safe-area-inset-bottom)); width: calc(100% - 28px); }
+.mobile-page .account-notice { top: calc(66px + env(safe-area-inset-top)); width: calc(100% - 24px); }
+.mobile-page .confirm-dialog { width: calc(100% - 24px); max-height: calc(100dvh - 24px); overflow-y: auto; padding: 18px; }
+.mobile-page .profile-dialog textarea { min-height: 78px; }
+.mobile-page .reaction-picker emoji-picker { width: min(350px, calc(100vw - 18px)); height: min(380px, calc(100dvh - 18px)); }
+@media (max-width: 390px) {
+  .mobile-page .room-actions { gap: 1px; }
+  .mobile-page .text-button { padding: 8px 4px; font-size: .7rem; }
+  .mobile-page .message-form button { padding: 10px 9px; }
+}
