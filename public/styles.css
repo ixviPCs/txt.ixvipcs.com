@@ -119,6 +119,7 @@ button:disabled { cursor: not-allowed; opacity: .55; }
 .account-loading { display: flex; align-items: center; justify-content: center; gap: 9px; margin-top: 16px; padding: 11px 12px; border: 1px solid #46546f; border-radius: 10px; background: #182337; color: #cbd8ec; font-size: .88rem; }
 .loading-spinner { width: 16px; height: 16px; border: 2px solid #60708d; border-top-color: #91b8ff; border-radius: 50%; animation: account-spin .8s linear infinite; }
 @keyframes account-spin { to { transform: rotate(360deg); } }
+.chat-message { transition: opacity .16s ease; }
 .chat-message[data-message-id^="pending-"] { opacity: .58; }
 .chat-message[data-message-id^="pending-"] .message-actions { display: none; }
 .chat-panel .error { position: fixed; z-index: 3; bottom: 78px; left: 50%; width: min(calc(100vw - 32px), 620px); transform: translateX(-50%); margin: 0; text-align: center; }
