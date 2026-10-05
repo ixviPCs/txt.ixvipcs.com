@@ -430,5 +430,5 @@ socket.on("connect", () => socket.emit("join", { mode: "create", deviceId }, (re
     rtcConfig = { iceServers: config.iceServers };
     joinVoice();
   });
-});
+}));
 socket.on("connect_error", () => { status.textContent = "Could not connect to voice chat."; });
