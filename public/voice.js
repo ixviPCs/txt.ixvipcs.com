@@ -1,5 +1,5 @@
 const socket = io();
-const name = localStorage.getItem("open-chat-display-name");
+let name = localStorage.getItem("open-chat-display-name");
 const deviceId = localStorage.getItem("open-chat-device-id");
 const grid = document.querySelector("#voice-grid");
 const participantList = document.querySelector("#voice-list");
@@ -19,6 +19,8 @@ let cameraStream;
 let screenStream;
 let muted = false;
 let deafened = false;
+let isAdmin = false;
+let kickedFromVoice = false;
 let audioContext;
 
 if (!name || !deviceId) window.location.replace("/");
@@ -37,7 +39,7 @@ function updatePeople() {
 
 function addCard(id, displayName, avatar = "", isSelf = false) {
   let card = document.querySelector(`[data-participant="${CSS.escape(id)}"]`);
-  if (card) return card;
+  if (card) { addKickButton(card, id, displayName); return card; }
   card = document.createElement("article");
   card.className = "voice-card";
   card.dataset.participant = id;
@@ -48,7 +50,30 @@ function addCard(id, displayName, avatar = "", isSelf = false) {
   label.textContent = isSelf ? `${displayName} (you)` : displayName;
   card.append(initials, label);
   grid.append(card);
+  addKickButton(card, id, displayName);
   return card;
+}
+
+function addKickButton(card, id, displayName) {
+  if (!isAdmin || id === socket.id || card.querySelector(".voice-kick-button")) return;
+  const button = document.createElement("button");
+  button.type = "button";
+  button.className = "voice-kick-button danger-button";
+  button.textContent = "Kick";
+  button.title = `Remove ${displayName} from voice chat`;
+  button.setAttribute("aria-label", `Remove ${displayName} from voice chat`);
+  button.addEventListener("click", () => {
+    button.disabled = true;
+    socket.emit("voice kick", id, (result) => {
+      if (!result?.ok) {
+        button.disabled = false;
+        status.textContent = result?.error || "Could not remove that participant.";
+        return;
+      }
+      status.textContent = `${displayName} was removed from voice chat.`;
+    });
+  });
+  card.append(button);
 }
 
 function addVideo(id, track, isSelf, label, mediaStreamId = "") {
@@ -349,6 +374,7 @@ async function startScreenShare() {
 shareScreenButton.addEventListener("click", () => screenStream ? stopScreenShare() : startScreenShare());
 
 function leaveVoice() {
+  if (kickedFromVoice) { window.location.assign("/"); return; }
   socket.emit("voice leave");
   [stream, cameraStream, screenStream].filter(Boolean).forEach((source) => source.getTracks().forEach((track) => track.stop()));
   connections.forEach((connection) => connection.close());
@@ -357,6 +383,18 @@ function leaveVoice() {
 }
 leaveButton.addEventListener("click", leaveVoice);
 window.addEventListener("pagehide", () => socket.emit("voice leave"));
+
+socket.on("voice kicked", (result = {}) => {
+  kickedFromVoice = true;
+  [stream, cameraStream, screenStream].filter(Boolean).forEach((source) => source.getTracks().forEach((track) => track.stop()));
+  stream = cameraStream = screenStream = undefined;
+  resetVoiceCards();
+  updatePeople();
+  socket.disconnect();
+  [muteButton, deafenButton, cameraButton, flipCameraButton, shareScreenButton].forEach((button) => { button.disabled = true; });
+  leaveButton.textContent = "Back to chat";
+  status.textContent = result.message || "An admin removed you from voice chat.";
+});
 
 async function joinVoice() {
   try {
@@ -380,5 +418,17 @@ async function joinVoice() {
 }
 socket.on("connect", () => socket.emit("join", { mode: "create", deviceId }, (result) => {
   if (!result?.ok) return status.textContent = result?.error || "Could not verify your account.";
-  socket.emit("voice config", (config) => { if (config?.ok) rtcConfig = { iceServers: config.iceServers }; joinVoice(); });
-}));
+  name = result.displayName || result.account?.name || name;
+  isAdmin = !!result.account?.admin;
+  document.querySelector("#voice-identity").textContent = `Voice as ${name}`;
+  participants.forEach((person, id) => {
+    const card = document.querySelector(`[data-participant="${CSS.escape(id)}"]`);
+    if (id !== socket.id && card) addKickButton(card, id, person.name);
+  });
+  socket.emit("voice config", (config) => {
+    if (!config?.ok) { status.textContent = config?.error || "Could not load voice settings."; return; }
+    rtcConfig = { iceServers: config.iceServers };
+    joinVoice();
+  });
+});
+socket.on("connect_error", () => { status.textContent = "Could not connect to voice chat."; });

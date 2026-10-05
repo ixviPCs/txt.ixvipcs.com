@@ -175,6 +175,18 @@ io.on("connection", (socket) => {
   socket.on("presence state", (state) => { if (socket.data.accountId) { socket.data.visibility = state === "away" ? "away" : "online"; broadcastPresence(); } }); socket.on("leave chat", () => socket.disconnect(true));
   socket.on("voice config", (acknowledge) => { const account = mustUser(socket, acknowledge); if (account) acknowledge?.({ ok: true, iceServers: voiceIceServers(account) }); });
   socket.on("voice join", (_, acknowledge) => { const account = mustUser(socket, acknowledge); if (!account) return; if (voiceAccounts().has(account.id)) return acknowledge?.({ ok: false, error: "You are already in voice chat in another tab." }); const peers = voiceParticipants(); socket.join("voice"); socket.emit("voice participants", peers); socket.to("voice").emit("voice participant joined", { id: socket.id, name: shownName(account), avatar: account.avatar || "" }); broadcastPresence(); acknowledge?.({ ok: true, name: shownName(account) }); });
+  socket.on("voice kick", (targetId, acknowledge) => {
+    const admin = mustAdmin(socket, acknowledge); if (!admin) return;
+    if (!socket.rooms.has("voice")) return acknowledge?.({ ok: false, error: "Join voice chat before removing someone." });
+    if (typeof targetId !== "string" || targetId === socket.id) return acknowledge?.({ ok: false, error: "Choose another voice participant." });
+    const target = io.sockets.sockets.get(targetId);
+    if (!target?.rooms.has("voice")) return acknowledge?.({ ok: false, error: "That person is no longer in voice chat." });
+    target.emit("voice kicked", { message: "An admin removed you from voice chat." });
+    target.to("voice").emit("voice participant left", target.id);
+    target.leave("voice");
+    broadcastPresence();
+    acknowledge?.({ ok: true });
+  });
   socket.on("voice signal", ({ target, signal }) => { const account = data.accounts[socket.data.accountId]; if (socket.rooms.has("voice") && target && signal && account) io.to(target).emit("voice signal", { from: socket.id, name: shownName(account), avatar: account.avatar || "", signal }); }); socket.on("voice leave", () => { if (socket.rooms.has("voice")) { socket.to("voice").emit("voice participant left", socket.id); socket.leave("voice"); broadcastPresence(); } }); socket.on("disconnecting", () => { if (socket.rooms.has("voice")) socket.to("voice").emit("voice participant left", socket.id); }); socket.on("disconnect", () => broadcastPresence());
 });
 server.listen(PORT, "0.0.0.0", () => console.log(`Chat is running at http://localhost:${PORT}`));
