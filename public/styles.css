@@ -157,7 +157,7 @@ button:disabled { cursor: not-allowed; opacity: .55; }
 @media (max-width: 620px) { .input-row { flex-wrap: wrap; } .input-row input { flex-basis: 100%; } .chat-topbar { align-items: flex-start; gap: 8px; flex-direction: column; } .room-actions { width: 100%; justify-content: space-between; gap: 8px; } .messages { top: 104px; } .message-form { bottom: 14px; } }
 
 /* Shared charcoal-slate palette */
-:root { --slate-bg: #36454F; --slate-panel: #2f3e47; --slate-raised: #40515b; --slate-hover: #4a5b65; --slate-input: #293840; --slate-border: #52636d; --slate-text: #eef3f4; --slate-muted: #bdc9cd; --slate-accent: #d1dde1; }
+:root { --slate-bg: #2F3D46; --slate-panel: #29363e; --slate-raised: #374852; --slate-hover: #43545e; --slate-input: #222f36; --slate-border: #495b65; --slate-text: #eef3f4; --slate-muted: #bdc9cd; --slate-accent: #d1dde1; }
 body, .voice-page { background: var(--slate-bg); color: var(--slate-text); }
 .name-panel, .confirm-dialog, .online-users ul, .admin-tools-menu, .reaction-admin-menu, .reaction-picker { border-color: var(--slate-border); background: var(--slate-panel); }
 .chat-topbar { border-color: var(--slate-border); background: rgb(43 57 66 / 94%); color: var(--slate-muted); }
