@@ -139,6 +139,15 @@ io.use((socket, next) => {
   next();
 });
 io.on("connection", (socket) => {
+  socket.use(([event, request, acknowledge], next) => {
+    if (event !== "chat message" || typeof request?.clientId !== "string") return next();
+    const account = mustUser(socket, acknowledge);
+    if (!account) return;
+    const clientId = clean(request.clientId, 120);
+    const existing = clientId && data.messages.find((message) => message.authorId === account.id && message.clientId === clientId);
+    if (existing) { acknowledge?.({ ok: true, message: view(existing), duplicate: true }); return; }
+    next();
+  });
   socket.on("join", (request, acknowledge) => {
     const deviceId = validDevice(request?.deviceId); if (!deviceId) return acknowledge?.({ ok: false, error: "This browser could not create a device ID." });
     const initialBan = currentBan(socket, deviceId); if (initialBan) return acknowledge?.({ ok: false, error: banError(initialBan) });
@@ -160,7 +169,8 @@ io.on("connection", (socket) => {
       data.devices[deviceId] = account.id; created = needsProfile;
     }
     if (!account) return acknowledge?.({ ok: false, error: "This device has no available account." }); const ban = currentBan(socket, deviceId, account.id); if (ban) return acknowledge?.({ ok: false, error: banError(ban) });
-    socket.data.accountId = account.id; socket.data.deviceId = deviceId; socket.data.visibility = "online"; account.lastIp = ipOf(socket); socket.join(`account:${account.id}`); socket.join("chat"); save(); acknowledge?.({ ok: true, account: profile(account), displayName: shownName(account), created, history: recentHistory() }); socket.emit("presence users", presence()); broadcastPresence();
+    socket.data.accountId = account.id; socket.data.deviceId = deviceId; socket.data.visibility = "online"; account.lastIp = ipOf(socket); socket.join(`account:${account.id}`); socket.join("chat"); save(); acknowledge?.({ ok: true, account: profile(account), displayName: shownName(account), created });
+    setImmediate(() => { if (!socket.connected || socket.data.accountId !== account.id) return; socket.emit("history", recentHistory()); broadcastPresence(); });
   });
   socket.on("get profile", (id, acknowledge) => { const account = data.accounts[id]; const viewer = data.accounts[socket.data.accountId]; if (!account) return acknowledge?.({ ok: false, error: "Profile not found." }); const result = { ok: true, profile: profile(account) }; if (viewer?.admin) { const ip = socketsFor(id).map(ipOf)[0] || ""; const shared = Object.values(data.accounts).some((item) => item.id !== id && item.lastIp === ip); result.moderationTargets = { device: Object.entries(data.devices).filter(([, accountId]) => accountId === id).map(([deviceId]) => deviceId)[0] || "", ip: isBanableIp(ip) && !shared ? ip : "" }; } acknowledge?.(result); });
   socket.on("update profile", (request, acknowledge) => { const actor = mustUser(socket, acknowledge); if (!actor) return; const target = request?.accountId && actor.admin ? data.accounts[request.accountId] : actor; if (!target) return acknowledge?.({ ok: false, error: "Account not found." });
