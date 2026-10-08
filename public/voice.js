@@ -25,9 +25,13 @@ let audioContext;
 
 if (!name || !deviceId) window.location.replace("/");
 document.querySelector("#voice-identity").textContent = `Voice as ${name}`;
+const hiddenAdminIndicator = document.createElement("span");hiddenAdminIndicator.className="hidden-admin-indicator";hiddenAdminIndicator.hidden=true;hiddenAdminIndicator.setAttribute("role","status");hiddenAdminIndicator.innerHTML='<span class="hidden-admin-dot" aria-hidden="true"></span>Hidden admin in VC';document.querySelector("#voice-identity").after(hiddenAdminIndicator);
+let isInvisible = false;
+
+function applyInvisibleMode(enabled) { isInvisible=!!enabled; const self=participants.get(socket.id); if(self){self.invisible=isInvisible;if(isInvisible)document.querySelector(`[data-participant="${CSS.escape(socket.id)}"]`)?.remove();else addCard(socket.id,self.name,localStorage.getItem("open-chat-avatar")||"",true)}if(isInvisible){stopCamera();stopScreenShare()}[cameraButton,flipCameraButton,shareScreenButton].forEach(button=>{button.disabled=isInvisible});updatePeople() }
 
 function updatePeople() {
-  const people = [...participants.values()];
+  const people = [...participants.values()].filter(person=>!person.invisible);
   participantCount.textContent = `${people.length} in voice`;
   participantList.replaceChildren();
   people.forEach((person) => {
@@ -194,10 +198,10 @@ function removeTracksFromConnections(oldStream) {
   connections.forEach((connection) => connection.getSenders().forEach((sender) => { if (oldTracks.has(sender.track)) connection.removeTrack(sender); }));
 }
 
-function makeConnection(peerId, peerName, peerAvatar = "") {
+function makeConnection(peerId, peerName = "Hidden admin", peerAvatar = "", invisible = false) {
   if (connections.has(peerId)) return connections.get(peerId);
-  participants.set(peerId, { id: peerId, name: peerName });
-  addCard(peerId, peerName, peerAvatar);
+  participants.set(peerId, { id: peerId, name: peerName || "Hidden admin", avatar: peerAvatar || "", invisible });
+  if(!invisible)addCard(peerId, peerName || "Hidden admin", peerAvatar);
   updatePeople();
   const connection = new RTCPeerConnection(rtcConfig);
   connection.polite = socket.id > peerId;
@@ -224,7 +228,7 @@ function makeConnection(peerId, peerName, peerAvatar = "") {
         kind = activeKinds[0][0];
       }
       kind ||= "video";
-      addVideo(peerId, track, false, kind === "camera" ? "Camera" : kind === "screen" ? "Screen" : "Video", remoteStream.id);
+      if(!participants.get(peerId)?.invisible)addVideo(peerId, track, false, kind === "camera" ? "Camera" : kind === "screen" ? "Screen" : "Video", remoteStream.id);
     }
   };
   connection.onsignalingstatechange = () => {
@@ -235,12 +239,14 @@ function makeConnection(peerId, peerName, peerAvatar = "") {
   return connection;
 }
 
-async function callPeer(peer) { const connection = makeConnection(peer.id, peer.name, peer.avatar); await negotiate(peer.id, connection); }
+async function callPeer(peer) { const connection = makeConnection(peer.id, peer.name, peer.avatar, peer.invisible); await negotiate(peer.id, connection); }
 socket.on("voice participants", (peers) => peers.forEach(callPeer));
-socket.on("voice participant joined", (peer) => makeConnection(peer.id, peer.name, peer.avatar));
+socket.on("voice participant joined", (peer) => makeConnection(peer.id, peer.name, peer.avatar, peer.invisible));
+socket.on("voice participant visibility",({id,invisible,name:peerName,avatar})=>{const person=participants.get(id);if(!person)return;person.invisible=!!invisible;if(id===socket.id){applyInvisibleMode(invisible);return}if(!invisible){person.name=peerName||person.name;person.avatar=avatar||"";addCard(id,person.name,person.avatar)}else document.querySelector(`[data-participant="${CSS.escape(id)}"]`)?.remove();updatePeople()});
+socket.on("hidden admin presence",({present})=>{hiddenAdminIndicator.hidden=!present});
 socket.on("voice participant left", removeParticipant);
 socket.on("voice signal", async ({ from, name: peerName, avatar, signal }) => {
-  const connection = makeConnection(from, peerName, avatar);
+  const connection = makeConnection(from, peerName || "Hidden admin", avatar, participants.get(from)?.invisible || false);
   try {
     if (signal.media) {
       connection.remoteStreamKinds ||= {};
@@ -409,11 +415,11 @@ async function joinVoice() {
       flipCameraButton.hidden = true;
     }
     stream = await navigator.mediaDevices.getUserMedia({ audio: true, video: false });
-    participants.set(socket.id, { id: socket.id, name });
-    addCard(socket.id, name, localStorage.getItem("open-chat-avatar") || "", true);
+    participants.set(socket.id, { id: socket.id, name, invisible:isInvisible });
+    if(!isInvisible)addCard(socket.id, name, localStorage.getItem("open-chat-avatar") || "", true);
     monitorAudio(socket.id, stream);
     updatePeople();
-    socket.emit("voice join", {}, (result) => { status.textContent = result?.ok ? "You are connected. Turn on camera or share a screen when ready." : result?.error || "Could not join voice."; });
+    socket.emit("voice join", {}, (result) => { if(result?.ok)applyInvisibleMode(result.invisible);status.textContent = result?.ok ? (result.invisible?"You are connected in invisible mode; your microphone remains active.":"You are connected. Turn on camera or share a screen when ready.") : result?.error || "Could not join voice."; });
   } catch (error) { status.textContent = "Microphone access is needed to join voice chat. Allow it in your browser, then reload this page."; }
 }
 socket.on("connect", () => socket.emit("join", { mode: "create", deviceId }, (result) => {
@@ -425,7 +431,7 @@ socket.on("connect", () => socket.emit("join", { mode: "create", deviceId }, (re
     const card = document.querySelector(`[data-participant="${CSS.escape(id)}"]`);
     if (id !== socket.id && card) addKickButton(card, id, person.name);
   });
-  socket.emit("voice config", (config) => {
+  socket.emit("get admin invisible",state=>{if(state?.ok)applyInvisibleMode(state.invisible)});socket.emit("voice config", (config) => {
     if (!config?.ok) { status.textContent = config?.error || "Could not load voice settings."; return; }
     rtcConfig = { iceServers: config.iceServers };
     joinVoice();

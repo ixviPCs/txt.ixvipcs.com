@@ -43,6 +43,14 @@ button:disabled { cursor: not-allowed; opacity: .55; }
 .online-users ul { position: absolute; z-index: 4; right: 0; top: 24px; width: min(220px, calc(100vw - 24px)); max-height: min(230px, calc(100dvh - 104px)); overflow-y: auto; margin: 0; padding: 8px; list-style: none; border: 1px solid #46546f; border-radius: 10px; background: #151b26; box-shadow: 0 12px 30px rgba(0,0,0,.35); }
 .online-users li { padding: 7px 8px; overflow-wrap: anywhere; }
 .online-users li { display: flex; align-items: center; gap: 8px; }
+.admin-tools-menu { position: absolute; z-index: 6; right: 0; top: 30px; width: min(270px, calc(100vw - 24px)); padding: 12px; border: 1px solid #46546f; border-radius: 10px; background: #151b26; box-shadow: 0 12px 30px rgba(0,0,0,.35); }
+.admin-tools-menu label { display: flex; align-items: center; gap: 9px; color: #eff3f8; cursor: pointer; }
+.admin-tools-menu input { appearance: none; width: 38px; height: 22px; flex: 0 0 auto; margin: 0; border: 1px solid #68758c; border-radius: 999px; background: #303846; cursor: pointer; transition: background .15s ease; }
+.admin-tools-menu input::before { content: ""; display: block; width: 16px; height: 16px; margin: 2px; border-radius: 50%; background: #dce6f6; transition: transform .15s ease; }
+.admin-tools-menu input:checked { border-color: #79a5ff; background: #315ba3; }
+.admin-tools-menu input:checked::before { transform: translateX(16px); }
+.admin-tools-menu input:focus-visible { outline: 2px solid #a7c5ff; outline-offset: 2px; }
+.admin-tools-menu p { margin: 8px 0 0; color: #aeb8c8; font-size: .78rem; line-height: 1.4; }
 .status-dot { width: 9px; height: 9px; flex: 0 0 9px; border-radius: 50%; background: #778196; }
 .status-online .status-dot { background: #65cf96; box-shadow: 0 0 8px #65cf9699; }
 .status-away .status-dot { background: #e6ad4e; box-shadow: 0 0 8px #e6ad4e88; }
@@ -127,6 +135,10 @@ button:disabled { cursor: not-allowed; opacity: .55; }
 .voice-page { min-height: 100dvh; background: radial-gradient(circle at 20% 0%, #263657, transparent 42%), #10131a; }
 .voice-shell { min-height: 100dvh; padding: 96px clamp(18px, 4vw, 48px) 126px; background: transparent; }
 .voice-status { color: #aeb8c8; text-align: center; margin-bottom: 22px; }
+.hidden-admin-indicator { display: inline-flex; align-items: center; gap: 8px; margin-left: 12px; padding: 5px 9px; border: 1px solid #8f3943; border-radius: 999px; background: #311b22; color: #ffd5d9; font-size: .8rem; }
+.hidden-admin-indicator[hidden] { display: none; }
+.hidden-admin-dot { width: 9px; height: 9px; flex: 0 0 auto; border-radius: 50%; background: #ff4055; box-shadow: 0 0 7px 2px #ff405599; animation: hidden-admin-pulse 1.6s ease-in-out infinite; }
+@keyframes hidden-admin-pulse { 50% { opacity: .48; box-shadow: 0 0 2px 1px #ff405566; } }
 .voice-grid { width: min(100%, 1200px); margin: 0 auto; display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 16px; }
 .voice-card { position: relative; min-height: 180px; display: grid; place-content: center; justify-items: center; gap: 12px; overflow: hidden; border: 1px solid #303b51; border-radius: 18px; background: rgba(21, 27, 38, .82); color: #dce6f6; transition: border-color .15s, box-shadow .15s, transform .15s; }
 .voice-card.talking { border-color: #79e6b0; box-shadow: 0 0 0 2px #79e6b044, 0 0 28px #79e6b055; transform: translateY(-2px); }

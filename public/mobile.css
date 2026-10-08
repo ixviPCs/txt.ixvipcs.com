@@ -9,6 +9,7 @@
 .mobile-page .text-button { min-height: 38px; padding: 8px 6px; font-size: .75rem; }
 .mobile-page .online-users summary { min-height: 38px; display: grid; place-items: center; }
 .mobile-page .online-users ul { position: fixed; top: calc(58px + env(safe-area-inset-top)); right: 12px; left: 12px; width: auto; max-height: min(300px, calc(100dvh - 150px)); }
+.mobile-page .admin-tools-menu { position: fixed; top: calc(58px + env(safe-area-inset-top)); right: 12px; left: auto; width: min(270px, calc(100vw - 24px)); }
 .mobile-page .messages { inset: calc(58px + env(safe-area-inset-top)) 0 calc(90px + env(safe-area-inset-bottom)); padding: 18px 10px; }
 .mobile-page .messages > li + li { margin-top: 18px; }
 .mobile-page .message-meta { gap: 9px; }
