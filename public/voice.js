@@ -11,6 +11,8 @@ const cameraButton = document.querySelector("#camera");
 const flipCameraButton = document.querySelector("#flip-camera");
 const shareScreenButton = document.querySelector("#share-screen");
 const leaveButton = document.querySelector("#leave-voice");
+const adminTools = document.querySelector("#admin-tools");
+const invisibleToggle = document.querySelector("#admin-invisible-toggle");
 const participants = new Map();
 const connections = new Map();
 let rtcConfig = { iceServers: [{ urls: "stun:stun.l.google.com:19302" }] };
@@ -29,6 +31,9 @@ const hiddenAdminIndicator = document.createElement("span");hiddenAdminIndicator
 let isInvisible = false;
 
 function applyInvisibleMode(enabled) { isInvisible=!!enabled; const self=participants.get(socket.id); if(self){self.invisible=isInvisible;if(isInvisible)document.querySelector(`[data-participant="${CSS.escape(socket.id)}"]`)?.remove();else addCard(socket.id,self.name,localStorage.getItem("open-chat-avatar")||"",true)}if(isInvisible){stopCamera();stopScreenShare()}[cameraButton,flipCameraButton,shareScreenButton].forEach(button=>{button.disabled=isInvisible});updatePeople() }
+
+invisibleToggle?.addEventListener("change",()=>{invisibleToggle.disabled=true;socket.emit("set admin invisible",invisibleToggle.checked,result=>{invisibleToggle.disabled=false;if(!result?.ok){invisibleToggle.checked=!invisibleToggle.checked;status.textContent=result?.error||"Could not update invisible mode."}else invisibleToggle.checked=result.invisible})});
+socket.on("admin invisible state",({enabled})=>{if(invisibleToggle)invisibleToggle.checked=!!enabled;applyInvisibleMode(!!enabled)});
 
 function updatePeople() {
   const people = [...participants.values()].filter(person=>!person.invisible);
@@ -426,12 +431,13 @@ socket.on("connect", () => socket.emit("join", { mode: "create", deviceId }, (re
   if (!result?.ok) return status.textContent = result?.error || "Could not verify your account.";
   name = result.displayName || result.account?.name || name;
   isAdmin = !!result.account?.admin;
+  adminTools.hidden=!isAdmin;
   document.querySelector("#voice-identity").textContent = `Voice as ${name}`;
   participants.forEach((person, id) => {
     const card = document.querySelector(`[data-participant="${CSS.escape(id)}"]`);
     if (id !== socket.id && card) addKickButton(card, id, person.name);
   });
-  socket.emit("get admin invisible",state=>{if(state?.ok)applyInvisibleMode(state.invisible)});socket.emit("voice config", (config) => {
+  socket.emit("get admin invisible",state=>{if(state?.ok){if(invisibleToggle)invisibleToggle.checked=state.invisible;applyInvisibleMode(state.invisible)}});socket.emit("voice config", (config) => {
     if (!config?.ok) { status.textContent = config?.error || "Could not load voice settings."; return; }
     rtcConfig = { iceServers: config.iceServers };
     joinVoice();

@@ -36,3 +36,6 @@
   .mobile-page .text-button { padding: 8px 4px; font-size: .7rem; }
   .mobile-page .message-form button { padding: 10px 9px; }
 }
+.mobile-page .mobile-message-actions { border-color: var(--slate-border); background: var(--slate-panel); }
+.mobile-page .mobile-message-actions .message-action { background: var(--slate-raised); color: var(--slate-text); }
+.mobile-page .mobile-message-actions .delete-action { background: #8a4650; color: #fff; }
